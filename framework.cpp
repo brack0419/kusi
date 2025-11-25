@@ -1,0 +1,1595 @@
+﻿#include "framework.h"
+
+#include "shader.h"
+#include "texture.h"
+// ADAPTER
+#include <dxgi.h>
+#undef min
+#undef max
+#include <algorithm>
+#define BT_NO_SIMD_OPERATOR_OVERLOADS
+#include <bullet/btBulletDynamicsCommon.h>
+
+
+framework::framework(HWND hwnd) : hwnd(hwnd)
+{
+}
+
+bool framework::initialize()
+{
+	HRESULT hr{ S_OK };
+
+	// ADAPTER
+	IDXGIFactory* factory;
+	CreateDXGIFactory(IID_PPV_ARGS(&factory));
+	IDXGIAdapter* adapter;
+	for (UINT adapter_index = 0; S_OK == factory->EnumAdapters(adapter_index, &adapter); ++adapter_index) {
+		DXGI_ADAPTER_DESC adapter_desc;
+		adapter->GetDesc(&adapter_desc);
+		if (adapter_desc.VendorId == 0x1002/*AMD*/ || adapter_desc.VendorId == 0x10DE/*NVIDIA*/)
+		{
+			break;
+		}
+		adapter->Release();
+	}
+	factory->Release();
+
+	UINT create_device_flags{ 0 };
+#ifdef _DEBUG
+	create_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+	D3D_FEATURE_LEVEL feature_levels{ D3D_FEATURE_LEVEL_11_0 };
+
+	DXGI_SWAP_CHAIN_DESC swap_chain_desc{};
+	swap_chain_desc.BufferCount = 1;
+	swap_chain_desc.BufferDesc.Width = SCREEN_WIDTH;
+	swap_chain_desc.BufferDesc.Height = SCREEN_HEIGHT;
+	swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swap_chain_desc.BufferDesc.RefreshRate.Numerator = 0;
+	swap_chain_desc.BufferDesc.RefreshRate.Denominator = 1;
+	swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swap_chain_desc.OutputWindow = hwnd;
+	swap_chain_desc.SampleDesc.Count = 8;
+	swap_chain_desc.SampleDesc.Quality = D3D11_STANDARD_MULTISAMPLE_PATTERN;
+	swap_chain_desc.Windowed = !FULLSCREEN;
+	hr = D3D11CreateDeviceAndSwapChain(adapter/*ADAPTER*/, D3D_DRIVER_TYPE_UNKNOWN/*ADAPTER*/, NULL, create_device_flags,
+		&feature_levels, 1, D3D11_SDK_VERSION, &swap_chain_desc,
+		&swap_chain, &device, NULL, &immediate_context);
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	// ADAPTER
+	adapter->Release();
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer{};
+	hr = swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<LPVOID*>(back_buffer.GetAddressOf()));
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	hr = device->CreateRenderTargetView(back_buffer.Get(), NULL, render_target_view.GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+#if 0
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_stencil_buffer{};
+	D3D11_TEXTURE2D_DESC texture2d_desc{};
+	texture2d_desc.Width = SCREEN_WIDTH;
+	texture2d_desc.Height = SCREEN_HEIGHT;
+	texture2d_desc.MipLevels = 1;
+	texture2d_desc.ArraySize = 1;
+	texture2d_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	texture2d_desc.SampleDesc.Count = 1;
+	texture2d_desc.SampleDesc.Quality = 0;
+	texture2d_desc.Usage = D3D11_USAGE_DEFAULT;
+	texture2d_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	texture2d_desc.CPUAccessFlags = 0;
+	texture2d_desc.MiscFlags = 0;
+	hr = device->CreateTexture2D(&texture2d_desc, NULL, depth_stencil_buffer.GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	D3D11_DEPTH_STENCIL_VIEW_DESC depth_stencil_view_desc{};
+	depth_stencil_view_desc.Format = texture2d_desc.Format;
+	depth_stencil_view_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+	depth_stencil_view_desc.Texture2D.MipSlice = 0;
+	hr = device->CreateDepthStencilView(depth_stencil_buffer.Get(), &depth_stencil_view_desc, depth_stencil_view.GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+#endif // 0
+
+	D3D11_VIEWPORT viewport{};
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.Width = static_cast<float>(SCREEN_WIDTH);
+	viewport.Height = static_cast<float>(SCREEN_HEIGHT);
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	immediate_context->RSSetViewports(1, &viewport);
+
+	D3D11_SAMPLER_DESC sampler_desc{};
+	sampler_desc.Filter = D3D11_FILTER_ANISOTROPIC;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.MipLODBias = 0;
+	sampler_desc.MaxAnisotropy = 16;
+	sampler_desc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+	sampler_desc.BorderColor[0] = 0;
+	sampler_desc.BorderColor[1] = 0;
+	sampler_desc.BorderColor[2] = 0;
+	sampler_desc.BorderColor[3] = 0;
+	sampler_desc.MinLOD = 0;
+	sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::POINT)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	sampler_desc.Filter = D3D11_FILTER_ANISOTROPIC;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::ANISOTROPIC)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	// UNIT.32
+	sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.BorderColor[0] = 0;
+	sampler_desc.BorderColor[1] = 0;
+	sampler_desc.BorderColor[2] = 0;
+	sampler_desc.BorderColor[3] = 0;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR_BORDER_BLACK)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	// UNIT.32
+	sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+	sampler_desc.BorderColor[0] = 1;
+	sampler_desc.BorderColor[1] = 1;
+	sampler_desc.BorderColor[2] = 1;
+	sampler_desc.BorderColor[3] = 1;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR_BORDER_WHITE)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	// RADIAL_BLUR
+	sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	sampler_desc.BorderColor[0] = 0;
+	sampler_desc.BorderColor[1] = 0;
+	sampler_desc.BorderColor[2] = 0;
+	sampler_desc.BorderColor[3] = 0;
+	hr = device->CreateSamplerState(&sampler_desc, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR_CLAMP)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	D3D11_DEPTH_STENCIL_DESC depth_stencil_desc{};
+	depth_stencil_desc.DepthEnable = TRUE;
+	depth_stencil_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	depth_stencil_desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	hr = device->CreateDepthStencilState(&depth_stencil_desc, depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_ON_ZW_ON)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	depth_stencil_desc.DepthEnable = TRUE;
+	depth_stencil_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	depth_stencil_desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	hr = device->CreateDepthStencilState(&depth_stencil_desc, depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_ON_ZW_OFF)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	depth_stencil_desc.DepthEnable = FALSE;
+	depth_stencil_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	depth_stencil_desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	hr = device->CreateDepthStencilState(&depth_stencil_desc, depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_ON)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	depth_stencil_desc.DepthEnable = FALSE;
+	depth_stencil_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	depth_stencil_desc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	hr = device->CreateDepthStencilState(&depth_stencil_desc, depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	D3D11_BLEND_DESC blend_desc{};
+	blend_desc.AlphaToCoverageEnable = FALSE;
+	blend_desc.IndependentBlendEnable = FALSE;
+	blend_desc.RenderTarget[0].BlendEnable = FALSE;
+	blend_desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+	blend_desc.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO;
+	blend_desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blend_desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blend_desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	hr = device->CreateBlendState(&blend_desc, blend_states[static_cast<size_t>(BLEND_STATE::NONE)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	blend_desc.AlphaToCoverageEnable = FALSE;
+	blend_desc.IndependentBlendEnable = FALSE;
+	blend_desc.RenderTarget[0].BlendEnable = TRUE;
+	blend_desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	blend_desc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	blend_desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blend_desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+	blend_desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	hr = device->CreateBlendState(&blend_desc, blend_states[static_cast<size_t>(BLEND_STATE::ALPHA)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	blend_desc.AlphaToCoverageEnable = FALSE;
+	blend_desc.IndependentBlendEnable = FALSE;
+	blend_desc.RenderTarget[0].BlendEnable = TRUE;
+	blend_desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA; //D3D11_BLEND_ONE D3D11_BLEND_SRC_ALPHA
+	blend_desc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	blend_desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+	blend_desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+	blend_desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	hr = device->CreateBlendState(&blend_desc, blend_states[static_cast<size_t>(BLEND_STATE::ADD)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+	blend_desc.AlphaToCoverageEnable = FALSE;
+	blend_desc.IndependentBlendEnable = FALSE;
+	blend_desc.RenderTarget[0].BlendEnable = TRUE;
+	blend_desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ZERO; //D3D11_BLEND_DEST_COLOR
+	blend_desc.RenderTarget[0].DestBlend = D3D11_BLEND_SRC_COLOR; //D3D11_BLEND_SRC_COLOR
+	blend_desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_DEST_ALPHA;
+	blend_desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+	blend_desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	hr = device->CreateBlendState(&blend_desc, blend_states[static_cast<size_t>(BLEND_STATE::MULTIPLY)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	D3D11_RASTERIZER_DESC rasterizer_desc{};
+	rasterizer_desc.FillMode = D3D11_FILL_SOLID;
+	rasterizer_desc.CullMode = D3D11_CULL_BACK;
+	// UNIT.21
+	//rasterizer_desc.FrontCounterClockwise = FALSE;
+	rasterizer_desc.FrontCounterClockwise = TRUE;
+	rasterizer_desc.DepthBias = 0;
+	rasterizer_desc.DepthBiasClamp = 0;
+	rasterizer_desc.SlopeScaledDepthBias = 0;
+	rasterizer_desc.DepthClipEnable = TRUE;
+	rasterizer_desc.ScissorEnable = FALSE;
+	rasterizer_desc.MultisampleEnable = FALSE;
+	rasterizer_desc.AntialiasedLineEnable = FALSE;
+	hr = device->CreateRasterizerState(&rasterizer_desc, rasterizer_states[static_cast<size_t>(RASTER_STATE::SOLID)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	rasterizer_desc.FillMode = D3D11_FILL_WIREFRAME;
+	rasterizer_desc.CullMode = D3D11_CULL_BACK;
+	rasterizer_desc.AntialiasedLineEnable = TRUE;
+	hr = device->CreateRasterizerState(&rasterizer_desc, rasterizer_states[static_cast<size_t>(RASTER_STATE::WIREFRAME)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	rasterizer_desc.FillMode = D3D11_FILL_SOLID;
+	rasterizer_desc.CullMode = D3D11_CULL_NONE;
+	rasterizer_desc.AntialiasedLineEnable = TRUE;
+	hr = device->CreateRasterizerState(&rasterizer_desc, rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	rasterizer_desc.FillMode = D3D11_FILL_WIREFRAME;
+	rasterizer_desc.CullMode = D3D11_CULL_NONE;
+	rasterizer_desc.AntialiasedLineEnable = TRUE;
+	hr = device->CreateRasterizerState(&rasterizer_desc, rasterizer_states[static_cast<size_t>(RASTER_STATE::WIREFRAME_CULL_NONE)].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	// DYNAMIC_TEXTURE
+	D3D11_BUFFER_DESC buffer_desc{};
+	buffer_desc.ByteWidth = sizeof(scene_constants);
+	buffer_desc.Usage = D3D11_USAGE_DEFAULT;
+	buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	buffer_desc.CPUAccessFlags = 0;
+	buffer_desc.MiscFlags = 0;
+	buffer_desc.StructureByteStride = 0;
+	hr = device->CreateBuffer(&buffer_desc, nullptr, constant_buffers[0].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	// UNIT.32
+	buffer_desc.ByteWidth = sizeof(parametric_constants);
+	buffer_desc.Usage = D3D11_USAGE_DEFAULT;
+	buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	buffer_desc.CPUAccessFlags = 0;
+	buffer_desc.MiscFlags = 0;
+	buffer_desc.StructureByteStride = 0;
+	hr = device->CreateBuffer(&buffer_desc, nullptr, constant_buffers[1].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	// RADIAL_BLUR
+	buffer_desc.ByteWidth = sizeof(radial_blur_constants);
+	buffer_desc.Usage = D3D11_USAGE_DEFAULT;
+	buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	buffer_desc.CPUAccessFlags = 0;
+	buffer_desc.MiscFlags = 0;
+	buffer_desc.StructureByteStride = 0;
+	hr = device->CreateBuffer(&buffer_desc, nullptr, constant_buffers[2].GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+	framebuffers[0] = std::make_unique<framebuffer>(device.Get(), 1920, 1080);
+	framebuffers[1] = std::make_unique<framebuffer>(device.Get(), 1920, 1080);
+
+	bit_block_transfer = std::make_unique<fullscreen_quad>(device.Get());
+	create_ps_from_cso(device.Get(), "blur_ps.cso", pixel_shaders[1].GetAddressOf());
+
+	// DYNAMIC_TEXTURE
+	//skinned_meshes[0] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\hamburger_man.fbx");
+	//skinned_meshes[1] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\load_hamburger.fbx");
+	skinned_meshes[2] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Patty.fbx");
+	skinned_meshes[3] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Shop.fbx");
+	skinned_meshes[4] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Spautla.fbx");
+	//skinned_meshes[5] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\bus.fbx");
+	// BOUNDING_BOX
+	skinned_meshes[6] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\cube.000.fbx");
+	dynamic_texture = std::make_unique<framebuffer>(device.Get(), 512, 512);
+
+	skinned_meshes[7] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Skewers.fbx");
+	skinned_meshes[8] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Buns_up.fbx");
+	skinned_meshes[9] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Buns_under.fbx");
+
+	skinned_meshes[10] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Cheese.fbx");
+
+	// テクスチャ表示用シェーダー
+	create_ps_from_cso(device.Get(), "dynamic_texture_ps.cso", effect_shaders[0].GetAddressOf());
+
+	// 背景アニメーション用シェーダー
+	create_ps_from_cso(device.Get(), "dynamic_background_ps.cso", effect_shaders[1].GetAddressOf());
+	dynamic_background = std::make_unique<framebuffer>(device.Get(), 1920, 1080);
+
+	// ブラー効果シェーダー
+	create_ps_from_cso(device.Get(), "radial_blur_ps.cso", pixel_shaders[0].GetAddressOf());
+
+	// BLOOM
+	bloomer = std::make_unique<bloom>(device.Get(), 1920, 1080);
+	create_ps_from_cso(device.Get(), "final_pass_ps.cso", pixel_shaders[0].ReleaseAndGetAddressOf());
+
+	initBulletWorld();   // ★ 追加
+
+	return true;
+}
+
+void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
+{
+	static bool prev_down = false;
+	bool now_down = (GetAsyncKeyState(VK_DOWN) & 0x8000);
+
+	if (now_down && !prev_down) { // 押した瞬間だけ反応
+		kusi.move = !kusi.move;               // トグル
+	}
+
+	prev_down = now_down; // 状態保存
+
+	if (kusi.move)
+	{
+		kusi.pos.y -= 0.0005;
+	}
+
+	if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+	{
+		// ヒットトップ開始
+		if (!hitStop)
+		{
+			hitStop = true;
+			hitStopLastSeconds = hitStopSecondsLength;
+		}
+	}
+
+	if (hitStop)
+	{
+		// ヒットストップ時間のカウントダウン
+		hitStopLastSeconds -= elapsed_time;
+		if (hitStopLastSeconds <= 0)
+		{
+			hitStopLastSeconds = 0.0f;
+			hitStop = false;
+		}
+	}
+
+	if (!bun_spawned_initial)
+	{
+		bun.exists = true;
+		bun.pos = { -0.3f, 1.3f, -10.0f }; // だいたいPattyと同じ奥行き
+		bun.vel = { 0.0f, 0.0f, 0.0f };
+		bun.half_extents = { 0.020f, 0.011f, 0.020f }; // 好みで微調整可
+		bun.mass = 1.0f;
+		bun.restitution = 0.0f;
+		bun_spawned_initial = true;
+	}
+
+	if (!hitStop)
+	{
+		if (!patty_spawned_initial)
+		{
+			add_patty({ 0.0f, 1.3f, translation.z }, // 位置（必要なら調整）
+				patty_default_half_extents,
+				patty_default_mass,
+				patty_default_restitution);
+			patty_spawned_initial = true;
+		}
+
+		// Bullet 物理ステップ
+		if (m_btWorld)
+		{
+			m_btWorld->setGravity(btVector3(0, patty_gravity_y, 0));
+
+
+			// 1/60固定ステップで回す例（最大サブステップ10回）
+			m_btWorld->stepSimulation(elapsed_time, 10, 1.0f / 60.0f);
+
+			// Bullet → 自前 struct へ反映
+			for (auto& P : patties)
+			{
+				if (!P.body) continue;
+
+				btTransform tr;
+				P.body->getMotionState()->getWorldTransform(tr);
+
+				btVector3 pos = tr.getOrigin();
+				P.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
+
+				btQuaternion q = tr.getRotation();
+				P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
+			}
+		}
+
+
+
+#ifdef USE_IMGUI
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+#endif
+
+#ifdef USE_IMGUI
+		ImGui::Begin("ImGUI");
+		calculate_frame_stats(); // フレームごとに呼ぶ
+
+		ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
+
+		ImGui::Checkbox("flat_shading", &flat_shading);
+		ImGui::Checkbox("Enable Dynamic Shader", &enable_dynamic_shader);
+		ImGui::Checkbox("Enable Dynamic Background", &enable_dynamic_background);
+		//ImGui::Checkbox("Enable RADIAL_BLUR", &enable_radial_blur);
+		ImGui::Checkbox("Enable Bloom", &enable_bloom);
+
+		ImGui::SliderFloat("light_direction.x", &light_direction.x, -1.0f, +1.0f);
+		ImGui::SliderFloat("light_direction.y", &light_direction.y, -1.0f, +1.0f);
+		ImGui::SliderFloat("light_direction.z", &light_direction.z, -1.0f, +1.0f);
+
+		// UNIT.32
+		ImGui::SliderFloat("extraction_threshold", &parametric_constants.extraction_threshold, +0.0f, +5.0f);
+		ImGui::SliderFloat("gaussian_sigma", &parametric_constants.gaussian_sigma, +0.0f, +10.0f);
+		ImGui::SliderFloat("exposure", &parametric_constants.exposure, +0.0f, +10.0f);
+
+		// RADIAL_BLUR
+		ImGui::DragFloat2("blur_center", &radial_blur_data.blur_center.x, 0.01f);
+		ImGui::SliderFloat("blur_strength", &radial_blur_data.blur_strength, +0.0f, +1.0f);
+		ImGui::SliderFloat("blur_radius", &radial_blur_data.blur_radius, +0.0f, +1.0f);
+		ImGui::SliderFloat("blur_decay", &radial_blur_data.blur_decay, +0.0f, +1.0f);
+
+		// BLOOM
+		ImGui::SliderFloat("bloom_extraction_threshold", &bloomer->bloom_extraction_threshold, +0.0f, +5.0f);
+		ImGui::SliderFloat("bloom_intensity", &bloomer->bloom_intensity, +0.0f, +5.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 10)); // 内側の余白を増やす
+		ImGui::SliderFloat("Camera Distance", &distance, 1.0f, 20.0f);
+		ImGui::PopStyleVar();
+
+		ImGui::Text("Stage Rotation");
+		ImGui::SliderFloat("Rot X##obj3", &rotation_object3.x, -DirectX::XM_PI, DirectX::XM_PI);
+		ImGui::SliderFloat("Rot Y##obj3", &rotation_object3.y, -DirectX::XM_PI, DirectX::XM_PI);
+		ImGui::SliderFloat("Rot Z##obj3", &rotation_object3.z, -DirectX::XM_PI, DirectX::XM_PI);
+		ImGui::SliderFloat("Pos X##obj3", &translation_object3.x, -10.0f, 10.0f);
+		ImGui::SliderFloat("Pos Y##obj3", &translation_object3.y, -10.0f, 10.0f);
+		ImGui::SliderFloat("Pos Z##obj3", &translation_object3.z, -10.0f, 10.0f);
+
+		ImGui::Text("Camera Focus (Buttonで微調整)");
+		ImGui::SliderFloat("Focus X", &camera_focus.x, -10.0f, 10.0f);
+		ImGui::SliderFloat("Focus Y", &camera_focus.y, 0.0f, 10.0f);
+		ImGui::SliderFloat("Focus Z", &camera_focus.z, -10.0f, 10.0f);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Patty System]");
+		ImGui::Checkbox("Simulate", &patty_sim_enabled);
+		ImGui::SliderFloat("Gravity Y", &patty_gravity_y, -50.0f, 0.0f, "%.2f");
+		ImGui::SliderFloat("Ground Y", &patty_ground_y, -5.0f, 5.0f, "%.3f");
+
+		ImGui::SliderFloat("Default Restitution", &patty_default_restitution, 0.0f, 1.0f);
+		ImGui::SliderFloat("Patty Spawn X", &patty_spawn_x, -10.0f, 10.0f, "%.3f");
+
+		if (ImGui::Button("Add 1 Patty"))
+		{
+			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Clear Patties")) { patties.clear(); }
+		ImGui::Text("Count: %d", (int)patties.size());
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Pate Collider]");
+		ImGui::Checkbox("Enable Pate Collider", &pate_collider_enabled);
+		ImGui::SliderFloat("Pate plane Y", &pate_plane_y, -1.0f, 3.0f, "%.3f");
+		ImGui::SliderFloat("Pate half X (width/2)", &pate_half_extents.x, 0.05f, 2.0f, "%.3f");
+		ImGui::SliderFloat("Pate half Y (thickness/2)", &pate_half_extents.y, 0.01f, 1.0f, "%.3f");
+		ImGui::SliderFloat("Pate half Z (depth/2)", &pate_half_extents.z, 0.05f, 2.0f, "%.3f");
+		ImGui::SliderFloat("Pate restitution", &pate_restitution, 0.0f, 1.0f);
+		ImGui::Text("Pate pos = (%.2f, %.2f, %.2f)", pate_position.x, pate_position.y, pate_position.z);
+		//ImGui::SliderFloat("pate_follow_smooth", &pate_follow_smooth, 0.0f, 1.0f);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Patty Z Controls]");
+		ImGui::Checkbox("Show Patty Collider", &patty_collider_visible);
+		// 生成時のZ
+		ImGui::DragFloat3("Default HalfExtents (hx,hy,hz)",
+			&patty_default_half_extents.x, 0.001f, 0.001f, 1.0f, "%.3f");
+
+		// 既存すべてを一括シフト（差分適用）
+		if (ImGui::SliderFloat("All Patties Z (offset)", &patties_z_offset, -10.0f, 10.0f, "%.3f"))
+		{
+			float dz = patties_z_offset - patties_z_offset_prev;
+			for (auto& P : patties) P.pos.z += dz;
+			patties_z_offset_prev = patties_z_offset;
+		}
+
+		// 1体だけ直接編集
+		if (!patties.empty())
+		{
+			ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
+			if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
+			{
+				ImGui::SliderFloat("Selected Patty Z", &patties[patty_selected_index].pos.z, -10.0f, 10.0f, "%.3f");
+			}
+		}
+
+		if (!patties.empty())
+		{
+			ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
+
+			if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
+			{
+				auto& S = patties[patty_selected_index];
+
+				// 入力 UI（ドラッグ操作で微調整しやすく）
+				ImGui::DragFloat("Selected Patty X", &S.pos.x, 0.01f, -10.0f, 10.0f, "%.3f");
+				ImGui::DragFloat("Selected Patty Y", &S.pos.y, 0.01f, -1.0f, 5.0f, "%.3f");
+				ImGui::DragFloat("Selected Patty Z", &S.pos.z, 0.01f, -10.0f, 10.0f, "%.3f");
+
+				// 視覚化用の現在値表示
+				ImGui::Text("Pos = (%.3f, %.3f, %.3f)", S.pos.x, S.pos.y, S.pos.z);
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Pate Control]");
+		ImGui::SliderFloat("Pate fixed X", &pate_fixed_x, -10.0f, 10.0f, "%.3f");
+		ImGui::SliderFloat("Pate fixed Z", &pate_fixed_z, -10.0f, 10.0f, "%.3f");
+
+		ImGui::TextUnformatted("Camera Orientation");
+		ImGui::SliderAngle("Yaw (rotateY)", &rotateY, -180.0f, 180.0f);
+		ImGui::SliderAngle("Pitch (rotateX)", &rotateX, -89.0f, 89.0f);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Ground Z Range]");
+		ImGui::Checkbox("Show Range", &ground_range_visible);
+		ImGui::DragFloat("Center Z", &ground_z_center, 0.01f, -10.0f, 10.0f, "%.3f");
+		ImGui::DragFloat("Half Range", &ground_z_half_range, 0.01f, 0.0f, 10.0f, "%.3f");
+
+		ImGui::SliderFloat("kusi Y", &kusi.pos.y, -30.0f, 30.0f, "%.3f");
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Buns]");
+		ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
+
+		ImGui::Separator();
+		ImGui::TextUnformatted("[Buns]");
+
+		// 当たり可視化の切替（既存の可視化に連動）
+		ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
+
+		ImGui::DragFloat3("Buns position (X,Y,Z)", &bun.pos.x, 0.01f, -20.0f, 20.0f, "%.3f");
+
+		if (ImGui::DragFloat3("Buns collider half extents", &bun.half_extents.x, 0.005f, 0.0f, 5.0f, "%.3f")) {
+			bun.half_extents.x = std::max(0.0f, bun.half_extents.x);
+			bun.half_extents.y = std::max(0.0f, bun.half_extents.y);
+			bun.half_extents.z = std::max(0.0f, bun.half_extents.z);
+		}
+
+		// プリセット（ワンボタンで大きさをサクッと変更したい人類向け）
+		if (ImGui::Button("Small"))  bun.half_extents = { 0.06f, 0.03f, 0.06f };
+		ImGui::SameLine();
+		if (ImGui::Button("Medium")) bun.half_extents = { 0.10f, 0.04f, 0.10f };
+		ImGui::SameLine();
+		if (ImGui::Button("Large"))  bun.half_extents = { 0.14f, 0.06f, 0.14f };
+		ImGui::End();
+
+		ImGui::Begin("Patty Debug");
+		for (int i = 0; i < patties.size(); ++i)
+		{
+			ImGui::Text("Patty %d : %s", i,
+				patties[i].isStuck ? "STUCK" :
+				patties[i].isColliding ? "HIT" : "FREE");
+		}
+		ImGui::End();
+
+#endif
+		// ★ ここを追加：毎フレーム物理更新
+		//simulate_patties(elapsed_time);
+		
+		simulate_bun(elapsed_time);
+
+		CheckKusiPattyCollision();
+		//for (auto& patty : patties)
+		//{
+		//	if (patty.isStuck)
+		//		continue; // ← 刺さってる場合は動かさない
+
+		//	// 通常の物理更新（例）
+		//	patty.pos.x += patty.vel.x * elapsed_time;
+		//	patty.pos.y += patty.vel.y * elapsed_time;
+		//	patty.pos.z += patty.vel.z * elapsed_time;
+		//}
+	}
+}
+void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
+{
+	HRESULT hr{ S_OK };
+
+	// UNIT.32
+	ID3D11RenderTargetView* null_render_target_views[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
+	immediate_context->OMSetRenderTargets(_countof(null_render_target_views), null_render_target_views, 0);
+	ID3D11ShaderResourceView* null_shader_resource_views[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]{};
+	immediate_context->VSSetShaderResources(0, _countof(null_shader_resource_views), null_shader_resource_views);
+	immediate_context->PSSetShaderResources(0, _countof(null_shader_resource_views), null_shader_resource_views);
+
+	FLOAT color[]{ 0.2f, 0.2f, 0.2f, 1.0f };
+	immediate_context->ClearRenderTargetView(render_target_view.Get(), color);
+#if 0
+	immediate_context->ClearDepthStencilView(depth_stencil_view.Get(), D3D11_zCLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+#endif // 0
+	immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), depth_stencil_view.Get());
+
+	immediate_context->PSSetSamplers(0, 1, sampler_states[static_cast<size_t>(SAMPLER_STATE::POINT)].GetAddressOf());
+	immediate_context->PSSetSamplers(1, 1, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR)].GetAddressOf());
+	immediate_context->PSSetSamplers(2, 1, sampler_states[static_cast<size_t>(SAMPLER_STATE::ANISOTROPIC)].GetAddressOf());
+	// UNIT.32
+	immediate_context->PSSetSamplers(3, 1, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR_BORDER_BLACK)].GetAddressOf());
+	immediate_context->PSSetSamplers(4, 1, sampler_states[static_cast<size_t>(SAMPLER_STATE::LINEAR_BORDER_WHITE)].GetAddressOf());
+
+	immediate_context->OMSetBlendState(blend_states[static_cast<size_t>(BLEND_STATE::ALPHA)].Get(), nullptr, 0xFFFFFFFF);
+	immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_ON_ZW_ON)].Get(), 0);
+	immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::SOLID)].Get());
+
+	// 追加：skinned_meshes[4] の world 行列を保存する（バウンディングボックス用）
+	DirectX::XMFLOAT4X4 world_obj4 = { 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+
+	D3D11_VIEWPORT viewport;
+	UINT num_viewports{ 1 };
+	immediate_context->RSGetViewports(&num_viewports, &viewport);
+
+	float aspect_ratio{ viewport.Width / viewport.Height };
+	DirectX::XMMATRIX P{ DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(30), aspect_ratio, 0.1f, 100.0f) };
+	DirectX::XMFLOAT3 center_of_rotation = camera_position; // 起動時のカメラ位置を中心にする
+
+	DirectX::XMMATRIX V;
+	{
+		DirectX::XMVECTOR up{ DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f) };
+
+		float sx = ::sinf(rotateX), cx = ::cosf(rotateX);
+		float sy = ::sinf(rotateY), cy = ::cosf(rotateY);
+		DirectX::XMVECTOR Focus = DirectX::XMLoadFloat3(&camera_focus);
+		DirectX::XMVECTOR Front = DirectX::XMVectorSet(-cx * sy, -sx, -cx * cy, 0.0f);
+		DirectX::XMVECTOR Distance = DirectX::XMVectorSet(distance, distance, distance, 0.0f);
+		Front = DirectX::XMVectorScale(Front, distance);
+		DirectX::XMVECTOR Eye = DirectX::XMVectorSubtract(Focus, Front);
+		DirectX::XMStoreFloat3(&camera_position, Eye);
+		V = DirectX::XMMatrixLookAtLH(DirectX::XMLoadFloat3(&camera_position),
+			DirectX::XMLoadFloat3(&camera_focus),
+			up);
+	}
+
+	//ワールドへの変換
+	{
+		const float vx = static_cast<float>(mouse_client_pos.x);
+		const float vy = static_cast<float>(mouse_client_pos.y);
+
+		using namespace DirectX;
+		XMVECTOR nearPt = XMVector3Unproject(
+			XMVectorSet(vx, vy, 0.0f, 1.0f),
+			0.0f, 0.0f, viewport.Width, viewport.Height,
+			0.0f, 1.0f,
+			P, V, XMMatrixIdentity());
+		XMVECTOR farPt = XMVector3Unproject(
+			XMVectorSet(vx, vy, 1.0f, 1.0f),
+			0.0f, 0.0f, viewport.Width, viewport.Height,
+			0.0f, 1.0f,
+			P, V, XMMatrixIdentity());
+		XMVECTOR dir = XMVector3Normalize(farPt - nearPt);
+
+		// --- ここから差し替え（YZ移動: X=const の平面と交差）---
+		const float planeX = pate_fixed_x;
+		const float nearX = XMVectorGetX(nearPt);
+		const float dirX = XMVectorGetX(dir);
+
+		if (fabsf(dirX) > 1e-6f) {
+			const float t = (planeX - nearX) / dirX;
+			XMVECTOR hit = XMVectorMultiplyAdd(dir, XMVectorReplicate(t), nearPt);
+			XMFLOAT3 hit3{}; XMStoreFloat3(&hit3, hit);
+
+			// X は固定、Y/Z を目標値に
+			pate_target.x = planeX;
+			pate_target.y = hit3.y;
+			pate_target.z = hit3.z;
+		}
+
+		// 追従スムージング：Y/Z のみ補間、X は固定
+		auto lerp = [](float a, float b, float s) { return a + (b - a) * s; };
+		pate_position.y = lerp(pate_position.y, pate_target.y, pate_follow_smooth);
+		pate_position.z = lerp(pate_position.z, pate_target.z, pate_follow_smooth);
+		pate_position.x = planeX;
+	}
+
+	//scene_constants data{};
+	DirectX::XMStoreFloat4x4(&data.view_projection, V * P);
+	data.light_direction = light_direction;
+	// UNIT.16
+
+	// DYNAMIC_TEXTURE
+	data.elapsed_time = elapsed_time;
+	data.time += elapsed_time;
+
+	immediate_context->UpdateSubresource(constant_buffers[0].Get(), 0, 0, &data, 0, 0);
+	immediate_context->VSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+	// UNIT.16
+	immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+	// UNIT.32
+	immediate_context->UpdateSubresource(constant_buffers[1].Get(), 0, 0, &parametric_constants, 0, 0);
+	immediate_context->PSSetConstantBuffers(2, 1, constant_buffers[1].GetAddressOf());
+
+	// DYNAMIC_TEXTURE
+	if (enable_dynamic_shader)
+	{
+		dynamic_texture->clear(immediate_context.Get());
+		dynamic_texture->activate(immediate_context.Get());
+		immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].Get(), 0);
+		immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+		bit_block_transfer->blit(immediate_context.Get(), nullptr, 0, 0, effect_shaders[0].Get());
+		dynamic_texture->deactivate(immediate_context.Get());
+		immediate_context->PSSetShaderResources(15, 1, dynamic_texture->shader_resource_views[0].GetAddressOf());
+	}
+	else
+	{
+		ID3D11ShaderResourceView* null_srv[] = { nullptr };
+		immediate_context->PSSetShaderResources(15, 1, null_srv);
+	}
+
+	// RADIAL_BLUR
+	if (enable_radial_blur)
+	{
+		immediate_context->UpdateSubresource(constant_buffers[1].Get(), 0, 0, &radial_blur_data, 0, 0);
+		immediate_context->PSSetConstantBuffers(2, 1, constant_buffers[1].GetAddressOf());
+	}
+
+	// UNIT.32
+	framebuffers[0]->clear(immediate_context.Get());
+	framebuffers[0]->activate(immediate_context.Get());
+
+	// DYNAMIC_BACKGROUND
+	if (enable_dynamic_background)
+	{
+		immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].Get(), 0);
+		immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+		immediate_context->OMSetBlendState(blend_states[static_cast<size_t>(BLEND_STATE::NONE)].Get(), nullptr, 0xFFFFFFFF);
+		bit_block_transfer->blit(immediate_context.Get(), nullptr, 0, 0, effect_shaders[1].Get());
+	}
+
+	immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_ON_ZW_ON)].Get(), 0);
+	immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::SOLID)].Get());
+	// UNIT.21
+	const DirectX::XMFLOAT4X4 coordinate_system_transforms[]{
+		{ -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 },	// 0:RHS Y-UP
+		{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 },		// 1:LHS Y-UP
+		{ -1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1 },	// 2:RHS Z-UP
+		{ 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1 },		// 3:LHS Z-UP
+	};
+#if 1
+	const float scale_factor = 1.0f; // To change the units from centimeters to meters, set 'scale_factor' to 0.01.
+#else
+	const float scale_factor = 0.01f; // To change the units from centimeters to meters, set 'scale_factor' to 0.01.
+#endif
+	const float spacing = 2.0f;
+
+	DirectX::XMMATRIX C{ DirectX::XMLoadFloat4x4(&coordinate_system_transforms[0]) * DirectX::XMMatrixScaling(scale_factor, scale_factor, scale_factor) };
+
+	// UNIT.18
+	DirectX::XMMATRIX S{ DirectX::XMMatrixScaling(scaling.x, scaling.y, scaling.z) };
+	DirectX::XMMATRIX R{ DirectX::XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z) };
+	DirectX::XMMATRIX T{ DirectX::XMMatrixTranslation(translation.x, translation.y, translation.z) };
+	DirectX::XMFLOAT4X4 world;
+	// UNIT.21
+
+	// === skinned_meshes[2]
+	for (const auto& P : patties)
+	{
+		using namespace DirectX;
+		XMMATRIX T = XMMatrixTranslation(P.pos.x, P.pos.y, P.pos.z);
+		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f);
+
+		XMVECTOR q = XMLoadFloat4(&P.rotQuat);
+		XMMATRIX Rp = XMMatrixRotationQuaternion(q);  // ★ パティ個別の回転
+
+		XMFLOAT4X4 world;
+		XMStoreFloat4x4(&world, C * S * R * Rp * T);  // 好きな順で調整
+
+		skinned_meshes[2]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
+	}
+
+	if (patty_collider_visible)
+	{
+		using namespace DirectX;
+
+		// キューブFBXの実寸（1辺サイズ）を取得して正規化
+		XMFLOAT3 cubeDim =
+		{
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		for (const auto& P : patties)
+		{
+			const float hx = P.half_extents.x;
+			const float hy = P.half_extents.y;
+			const float hz = P.half_extents.z;
+
+			// Pattyのハーフエクステントに合わせてキューブをスケーリング
+			XMMATRIX Sbox = XMMatrixScaling((2.0f * hx) / cubeDim.x,
+				(2.0f * hy) / cubeDim.y,
+				(2.0f * hz) / cubeDim.z);
+			XMMATRIX Tbox = XMMatrixTranslation(P.pos.x, P.pos.y, P.pos.z);
+			XMVECTOR q = XMLoadFloat4(&P.rotQuat);
+			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
+
+			XMFLOAT4X4 world_box;
+			XMStoreFloat4x4(&world_box, C* Sbox* R* Rp* Tbox);
+
+			// 半透明で描画（線ではなく中身あり。嫌ならアルファ上げ下げする）
+			skinned_meshes[6]->render(immediate_context.Get(), world_box,
+				{ 1.0f, 0.2f, 0.2f, 0.35f }, nullptr, true);
+		}
+	}
+
+	//=== skinned_meshes[3]
+	{
+		DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+			translation_object3.x,
+			translation_object3.y,
+			translation_object3.z
+		);
+		DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+		DirectX::XMFLOAT4X4 world;
+		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
+		bool prev_flat = flat_shading;
+		flat_shading = true; // Object3 はフラット描画
+		skinned_meshes[3]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
+		flat_shading = prev_flat;
+	}
+
+	//{
+	//	using namespace DirectX;
+	//	DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+	//		translation_object3.x,
+	//		translation_object3.y,
+	//		translation_object3.z
+	//	);
+	//	DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+	//	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+	//		rotation_object3.x,
+	//		rotation_object3.y,
+	//		rotation_object3.z
+	//	);
+	//	DirectX::XMFLOAT4X4 world;
+	//	XMStoreFloat4x4(&world, C * Scale * R * T);
+	//	skinned_meshes[5]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
+	//}
+
+	//// === skinned_meshes[4]（アニメーションなし）===
+	///変更箇所
+
+	{
+		using namespace DirectX;
+		XMMATRIX T = XMMatrixTranslation(pate_position.x, pate_position.y, pate_position.z);
+		XMMATRIX Scale = XMMatrixScaling(0.01f, 0.01f, 0.01f);
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y + 6.3,
+			rotation_object3.z
+		);
+
+		XMFLOAT4X4 world_local;
+		XMStoreFloat4x4(&world_local, C * Scale * R * T);
+
+		// 描画に使う world を保存しておく（後でバウンディングボックス計算に使う）
+		world_obj4 = world_local;
+
+		skinned_meshes[4]->render(immediate_context.Get(), world_local, material_color, nullptr, flat_shading);
+	}
+
+	//// === skinned_meshes[7]（アニメーションなし）===
+	///変更箇所
+	{
+		using namespace DirectX;
+		XMMATRIX T = XMMatrixTranslation(kusi.pos.x, kusi.pos.y, kusi.pos.z);
+		XMMATRIX Scale = XMMatrixScaling(0.08f, 0.08f, 0.08f);
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+
+		XMFLOAT4X4 world_local;
+		XMStoreFloat4x4(&world_local, C * Scale * R * T);
+
+		// 描画に使う world を保存しておく（後でバウンディングボックス計算に使う）
+		world_obj4 = world_local;
+
+		skinned_meshes[7]->render(immediate_context.Get(), world_local, material_color, nullptr, flat_shading);
+	}
+
+	{
+		using namespace DirectX;
+
+		// ✅ まず、参照となる「キューブFBX(skinned_mesh[6])」の実寸を取得
+		XMFLOAT3 cubeDim =
+		{
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		// ✅ 次に、Kusi（串？）のハーフエクステントを指定
+		const float hx = kusi.half_extents.x;  // Xスケールに対応
+		const float hy = kusi.half_extents.y;  // Yスケールに対応
+		const float hz = kusi.half_extents.z;  // Zスケールに対応
+
+		// ✅ Kusiのスケーリング行列を、実寸に基づいて調整
+		XMMATRIX Sbox = XMMatrixScaling(
+			(2.0f * hx) / cubeDim.x,
+			(2.0f * hy) / cubeDim.y,
+			(2.0f * hz) / cubeDim.z
+		);
+
+		// ✅ 位置・回転行列
+		XMMATRIX T = XMMatrixTranslation(kusi.pos.x, kusi.pos.y, kusi.pos.z);
+		XMMATRIX R = XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+
+		// ✅ 最終的なワールド行列
+		XMFLOAT4X4 world_box;
+		XMStoreFloat4x4(&world_box, C * Sbox * R * T);
+
+		// ✅ バウンディングボックス描画
+		// 半透明（赤）で中身あり。線だけにしたければαを0.2以下に。
+		skinned_meshes[6]->render(
+			immediate_context.Get(),
+			world_box,
+			{ 0.2f, 1.0f, 0.2f, 1.0f },  // RGBA（赤系で透明度あり）
+			nullptr,
+			true
+		);
+
+		// ✅ 後で使う場合にワールド行列を保存（オプション）
+		world_obj4 = world_box;
+	}
+
+	// === skinned_meshes[8] = buns.fbx を1体表示 ===
+	if (bun.exists)
+	{
+		using namespace DirectX;
+		// FBXはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
+		XMMATRIX T = XMMatrixTranslation(bun.pos.x, bun.pos.y, bun.pos.z);
+		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f); // 必要なら調整
+		XMFLOAT4X4 world_bun;
+		XMStoreFloat4x4(&world_bun, C * S * R * T);
+		skinned_meshes[8]->render(immediate_context.Get(), world_bun, material_color, nullptr, flat_shading);
+	}
+
+	// （任意）Bunの当たりAABBを可視化
+	if (bun.exists && bun_collider_visible)
+	{
+		using namespace DirectX;
+
+		// キューブFBXの実寸（1辺サイズ）を取得
+		XMFLOAT3 cubeDim =
+		{
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		XMMATRIX Sbox = XMMatrixScaling(
+			(2.0f * bun.half_extents.x) / cubeDim.x,
+			(2.0f * bun.half_extents.y) / cubeDim.y,
+			(2.0f * bun.half_extents.z) / cubeDim.z);
+
+		XMMATRIX Tbox = XMMatrixTranslation(-0.3f, bun.pos.y, bun.pos.z);
+
+		XMFLOAT4X4 world_box;
+		XMStoreFloat4x4(&world_box, C * Sbox * Tbox);
+		skinned_meshes[6]->render(immediate_context.Get(), world_box, bun_collider_color, nullptr, true);
+	}
+
+	// ：地面 Z
+	if (ground_range_visible)
+	{
+		using namespace DirectX;
+
+		XMFLOAT3 cubeDim = {
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		const float slab_y_thickness = 0.01f;
+		const float slab_x_width = 100.0f;
+		const float slab_z_depth = 2.0f * ground_z_half_range;
+
+		XMMATRIX Sslab = XMMatrixScaling(
+			slab_x_width / cubeDim.x,
+			slab_y_thickness / cubeDim.y,
+			slab_z_depth / cubeDim.z
+		);
+
+		XMMATRIX Tslab = XMMatrixTranslation(
+			0.0f,
+			patty_ground_y + slab_y_thickness * 0.5f,
+			ground_z_center
+		);
+
+		XMFLOAT4X4 world_slab;
+		XMStoreFloat4x4(&world_slab, C * Sslab * Tslab);
+
+		skinned_meshes[6]->render(
+			immediate_context.Get(),
+			world_slab,
+			ground_range_color,
+			nullptr,
+			true
+		);
+	}
+
+	// BOUNDING_BOX
+	{
+		using namespace DirectX;
+
+		// 0: Target model
+		// 1: Bounding box model
+		XMFLOAT3 dimensions[] = {
+#if 0
+			{
+				skinned_meshes[4]->bounding_box[1].x - skinned_meshes[4]->bounding_box[0].x,
+				skinned_meshes[4]->bounding_box[1].y - skinned_meshes[4]->bounding_box[0].y,
+				skinned_meshes[4]->bounding_box[1].z - skinned_meshes[4]->bounding_box[0].z,
+			},
+#else
+			{ 100.0f, 150.0f, 60.0f },
+#endif
+			{
+				skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+				skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+				skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z,
+			},
+		};
+		XMFLOAT3 centers[] = {
+			{
+				skinned_meshes[4]->bounding_box[0].x + (skinned_meshes[4]->bounding_box[1].x - skinned_meshes[4]->bounding_box[0].x) * 0.5f,
+				skinned_meshes[4]->bounding_box[0].y + (skinned_meshes[4]->bounding_box[1].y - skinned_meshes[4]->bounding_box[0].y) * 0.5f,
+				skinned_meshes[4]->bounding_box[0].z + (skinned_meshes[4]->bounding_box[1].z - skinned_meshes[4]->bounding_box[0].z) * 0.5f,
+			},
+			{
+				skinned_meshes[6]->bounding_box[0].x + (skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x) * 0.5f,
+				skinned_meshes[6]->bounding_box[0].y + (skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y) * 0.5f,
+				skinned_meshes[6]->bounding_box[0].z + (skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z) * 0.5f,
+			},
+		};
+
+		XMMATRIX S = XMMatrixScaling(dimensions[0].x / dimensions[1].x, dimensions[0].y / dimensions[1].y, dimensions[0].z / dimensions[1].z);
+		XMMATRIX T = XMMatrixTranslation(centers[0].x - centers[1].x, centers[0].y - centers[1].y, centers[0].z - centers[1].z);
+
+		// world_obj4 を使ってバウンディングボックスの最終 world 行列を作る
+		DirectX::XMFLOAT4X4 transform;
+		{
+			// S と T は既に計算済み（あなたのコード内で定義されていることを前提）
+			// もし S/T が同じブロック外に無ければ再計算してください（下に再掲あり）
+			DirectX::XMMATRIX worldMat = DirectX::XMLoadFloat4x4(&world_obj4);
+			DirectX::XMMATRIX scaleMat = DirectX::XMMatrixScaling(dimensions[0].x / dimensions[1].x,
+				dimensions[0].y / dimensions[1].y,
+				dimensions[0].z / dimensions[1].z);
+			DirectX::XMMATRIX transMat = DirectX::XMMatrixTranslation(centers[0].x - centers[1].x,
+				centers[0].y - centers[1].y,
+				centers[0].z - centers[1].z);
+
+			XMStoreFloat4x4(&transform, scaleMat * transMat * worldMat);
+		}
+	}
+	{
+		using namespace DirectX;
+
+		const float hx = pate_half_extents.x;
+		const float hy = pate_half_extents.y;
+		const float hz = pate_half_extents.z;
+
+		XMFLOAT3 cubeDim =
+		{
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		XMMATRIX S = XMMatrixScaling((2.0f * hx) / cubeDim.x,
+			(2.0f * hy) / cubeDim.y,
+			(2.0f * hz) / cubeDim.z);
+
+		XMMATRIX T = XMMatrixTranslation(pate_position.x, pate_position.y, pate_position.z);
+		XMFLOAT4X4 world_pate;
+		XMStoreFloat4x4(&world_pate, C * S * T);
+		skinned_meshes[6]->render(immediate_context.Get(), world_pate, { 0.2f, 0.9f, 1.0f, 0.25f }, nullptr, /*flat_shading*/ true);
+	}
+	// UNIT.32
+	framebuffers[0]->deactivate(immediate_context.Get());
+
+	if (enable_bloom)
+	{
+		// BLOOM
+		bloomer->make(immediate_context.Get(), framebuffers[0]->shader_resource_views[0].Get());
+
+		immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].Get(), 0);
+		immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+		immediate_context->OMSetBlendState(blend_states[static_cast<size_t>(BLEND_STATE::ALPHA)].Get(), nullptr, 0xFFFFFFFF);
+		ID3D11ShaderResourceView* shader_resource_views[] =
+		{
+			framebuffers[0]->shader_resource_views[0].Get(),
+			bloomer->shader_resource_view(),
+		};
+		bit_block_transfer->blit(immediate_context.Get(), shader_resource_views, 0, 2, pixel_shaders[0].Get());
+	}
+
+	if (enable_radial_blur)
+	{
+		// RADIAL_BLUR
+		immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].Get(), 0);
+		immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+		ID3D11ShaderResourceView* shader_resource_views[]{ framebuffers[0]->shader_resource_views[0].Get() };
+		bit_block_transfer->blit(immediate_context.Get(), shader_resource_views, 0, _countof(shader_resource_views), pixel_shaders[0].Get());
+	}
+
+	framebuffers[1]->clear(immediate_context.Get());
+	framebuffers[1]->activate(immediate_context.Get());
+	immediate_context->OMSetDepthStencilState(depth_stencil_states[static_cast<size_t>(DEPTH_STATE::ZT_OFF_ZW_OFF)].Get(), 0);
+	immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+	bit_block_transfer->blit(immediate_context.Get(), framebuffers[0]->shader_resource_views[0].GetAddressOf(), 0, 1, pixel_shaders[0].Get());
+	framebuffers[1]->deactivate(immediate_context.Get());
+#if 0
+	immediate_context->RSSetState(rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
+	bit_block_transfer->blit(immediate_context.Get(), framebuffers[1]->shader_resource_views[0].GetAddressOf(), 0, 1);
+#endif
+
+#ifdef USE_IMGUI
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+#endif
+
+	UINT sync_interval{ 0 };
+	swap_chain->Present(sync_interval, 0);
+}
+void framework::add_patty(const DirectX::XMFLOAT3& p,
+	const DirectX::XMFLOAT3& half_extents,
+	float mass,
+	float restitution)
+{
+	Patty obj{};
+	obj.pos = p;
+	obj.vel = { 0.0f, 0.0f, 0.0f };
+	obj.half_extents = half_extents;
+	obj.mass = mass;
+	obj.restitution = restitution;
+
+	// --- Bullet rigid body 作成 ---
+	btTransform tr;
+	tr.setIdentity();
+	tr.setOrigin(btVector3(p.x, p.y, p.z));
+
+	btVector3 inertia(0, 0, 0);
+	if (mass > 0.0f)
+		m_pattyShape->calculateLocalInertia(mass, inertia);
+
+	btDefaultMotionState* motion = new btDefaultMotionState(tr);
+	btRigidBody::btRigidBodyConstructionInfo info(mass, motion, m_pattyShape, inertia);
+	info.m_restitution = restitution;
+
+	btRigidBody* body = new btRigidBody(info);
+	m_btWorld->addRigidBody(body);
+
+	obj.body = body;
+
+	patties.push_back(obj);
+	m_pattyBodies.push_back(body);
+}
+
+void framework::resolve_pair(int ia, int ib)
+{
+	using namespace DirectX;
+	Patty& A = patties[ia];
+	Patty& B = patties[ib];
+
+	// 中心差
+	float dx = B.pos.x - A.pos.x;
+	float dy = B.pos.y - A.pos.y;
+	float dz = B.pos.z - A.pos.z;
+
+	// 各軸のオーバーラップ量
+	float ox = (A.half_extents.x + B.half_extents.x) - fabsf(dx);
+	float oy = (A.half_extents.y + B.half_extents.y) - fabsf(dy);
+	float oz = (A.half_extents.z + B.half_extents.z) - fabsf(dz);
+
+	// 分離してたら終了
+	if (ox <= 0.0f || oy <= 0.0f || oz <= 0.0f) return;
+
+	// 最小貫入軸で解決
+	float penetration;
+	XMFLOAT3 n{ 0,0,0 }; // 法線
+
+	if (ox <= oy && ox <= oz) { penetration = ox; n.x = (dx >= 0.0f) ? 1.0f : -1.0f; }
+	else if (oy <= oz) { penetration = oy; n.y = (dy >= 0.0f) ? 1.0f : -1.0f; }
+	else { penetration = oz; n.z = (dz >= 0.0f) ? 1.0f : -1.0f; }
+
+	float invMa = (A.mass > 0.0f) ? 1.0f / A.mass : 0.0f;
+	float invMb = (B.mass > 0.0f) ? 1.0f / B.mass : 0.0f;
+	float invSum = invMa + invMb;
+	if (invSum > 0.0f)
+	{
+		float moveA = (invMa / invSum) * penetration;
+		float moveB = (invMb / invSum) * penetration;
+
+		A.pos.x -= n.x * moveA;  A.pos.y -= n.y * moveA;  A.pos.z -= n.z * moveA;
+		B.pos.x += n.x * moveB;  B.pos.y += n.y * moveB;  B.pos.z += n.z * moveB;
+	}
+
+	// 速度の反発（1次元）
+	XMFLOAT3 rv{
+		B.vel.x - A.vel.x,
+		B.vel.y - A.vel.y,
+		B.vel.z - A.vel.z
+	};
+	float relN = rv.x * n.x + rv.y * n.y + rv.z * n.z;
+	if (relN > 0.0f) return;
+
+	float e = std::clamp(std::min(A.restitution, B.restitution), 0.0f, 1.0f);
+	float j = -(1.0f + e) * relN;
+	j /= (invSum > 0.0f) ? invSum : 1.0f;
+
+	A.vel.x -= n.x * j * invMa;  A.vel.y -= n.y * j * invMa;  A.vel.z -= n.z * j * invMa;
+	B.vel.x += n.x * j * invMb;  B.vel.y += n.y * j * invMb;  B.vel.z += n.z * j * invMb;
+}
+
+void framework::simulate_bun(float dt)
+{
+	if (!bun.exists) return;
+
+	// 重力
+	bun.vel.y += patty_gravity_y * dt;
+
+	// 積分
+	bun.pos.x += bun.vel.x * dt;
+	bun.pos.y += bun.vel.y * dt;
+	bun.pos.z += bun.vel.z * dt;
+
+	// 地面との衝突（Z 範囲内のときだけ有効）
+	const bool ground_active = (fabsf(bun.pos.z - ground_z_center) <= ground_z_half_range);
+	if (ground_active)
+	{
+		const float bottom = bun.pos.y - bun.half_extents.y;
+		if (bottom < patty_ground_y)
+		{
+			bun.pos.y += (patty_ground_y - bottom);
+			if (bun.vel.y < 0) bun.vel.y = -bun.vel.y * (bun.restitution);
+		}
+	}
+
+	if (pate_collider_enabled)
+	{
+		using namespace DirectX;
+
+		const XMFLOAT3& C = bun.pos;
+		const XMFLOAT3  a = bun.half_extents;
+
+		const XMFLOAT3& P = pate_position;
+		const XMFLOAT3  b = pate_half_extents;
+
+		// 中心差
+		float dx = C.x - P.x;
+		float dy = C.y - P.y;
+		float dz = C.z - P.z;
+
+		// 各軸オーバーラップ
+		float ox = (a.x + b.x) - fabsf(dx);
+		float oy = (a.y + b.y) - fabsf(dy);
+		float oz = (a.z + b.z) - fabsf(dz);
+
+		if (ox > 0.0f && oy > 0.0f && oz > 0.0f)
+		{
+			// 最小貫入軸
+			float penetration;
+			XMFLOAT3 n{ 0,0,0 };
+			if (ox <= oy && ox <= oz) { penetration = ox; n.x = (dx >= 0.0f) ? 1.0f : -1.0f; }
+			else if (oy <= oz) { penetration = oy; n.y = (dy >= 0.0f) ? 1.0f : -1.0f; }
+			else { penetration = oz; n.z = (dz >= 0.0f) ? 1.0f : -1.0f; }
+
+			// pate は運動学的（無限質量）として bun のみ押し戻す
+			bun.pos.x += n.x * penetration;
+			bun.pos.y += n.y * penetration;
+			bun.pos.z += n.z * penetration;
+
+			// 法線方向の速度を反射（Pattyの処理と同じ形）
+			float relN = bun.vel.x * n.x + bun.vel.y * n.y + bun.vel.z * n.z;
+			if (relN < 0.0f)
+			{
+				float e = std::clamp(std::min(bun.restitution, pate_restitution), 0.0f, 1.0f);
+				float j = -(1.0f + e) * relN; // pate は無限質量
+				bun.vel.x += n.x * j;
+				bun.vel.y += n.y * j;
+				bun.vel.z += n.z * j;
+			}
+		}
+	}
+
+	// Patty との AABB vs AABB 当たり
+	// Patty側も AABB 表示＆パラメータを持っているので、素直にAABB同士で解決する
+	for (const auto& S : patties)
+	{
+		const float dx = bun.pos.x - S.pos.x;
+		const float px = (bun.half_extents.x + S.half_extents.x) - fabsf(dx);
+		if (px <= 0) continue;
+
+		const float dy = bun.pos.y - S.pos.y;
+		const float py = (bun.half_extents.y + S.half_extents.y) - fabsf(dy);
+		if (py <= 0) continue;
+
+		const float dz = bun.pos.z - S.pos.z;
+		const float pz = (bun.half_extents.z + S.half_extents.z) - fabsf(dz);
+		if (pz <= 0) continue;
+
+		// 最小貫通軸で押し戻し。反発係数は両者の大きい方を採用（単純化）
+		const float e = std::max(bun.restitution, S.restitution);
+
+		if (py <= px && py <= pz)
+		{
+			const float s = (dy >= 0.0f) ? 1.0f : -1.0f;
+			bun.pos.y += s * py;
+			if (s * bun.vel.y < 0.0f) bun.vel.y = -bun.vel.y * e;
+		}
+	}
+
+	// 数値発散の簡易ブレーキ（必要なら）
+	bun.vel.x *= 0.999f;
+	bun.vel.z *= 0.999f;
+}
+
+void framework::simulate_patties(float dt)
+{
+	using namespace DirectX;
+	if (!patty_sim_enabled) return;
+
+	// 1) 重力 & 積分
+	for (auto& P : patties)
+	{
+		if (P.isStuck)
+			continue; // ← 刺さってる場合は動かさない
+
+		P.vel.y += patty_gravity_y * dt;
+		P.pos.x += P.vel.x * dt;
+		P.pos.y += P.vel.y * dt;
+		P.pos.z += P.vel.z * dt;
+
+		float minY = P.pos.y - P.half_extents.y;
+		if (minY < patty_ground_y)
+		{
+			// --- 追加：Z レンジ内判定 ---
+			const bool ground_active_along_z =
+				fabsf(P.pos.z - ground_z_center) <= ground_z_half_range;
+
+			float minY = P.pos.y - P.half_extents.y;
+
+			// --- 変更：Z レンジ内のときだけ地面と当たる ---
+			if (ground_active_along_z && (minY < patty_ground_y))
+			{
+				P.pos.y = patty_ground_y + P.half_extents.y;
+				if (P.vel.y < 0.0f)
+					P.vel.y = -P.vel.y * std::clamp(P.restitution, 0.0f, 1.0f);
+				if (fabsf(P.vel.y) < 0.05f) P.vel.y = 0.0f;
+			}
+		}
+	}
+
+	// 2) 相互衝突（全組み合わせ）
+	const int n = static_cast<int>(patties.size());
+	for (int i = 0; i < n; ++i)
+		for (int j = i + 1; j < n; ++j)
+			resolve_pair(i, j);
+
+	for (auto& P : patties)
+	{
+		if (P.isStuck)
+			continue; // ← 刺さってる場合は動かさない
+
+		resolve_pate_collision(P);
+		//resolve_kusi_collision(P);
+	}
+}
+void framework::resolve_pate_collision(Patty& S)
+{
+	using namespace DirectX;
+
+	if (!pate_collider_enabled) return;
+
+	const XMFLOAT3& C = S.pos;
+	const XMFLOAT3  a = S.half_extents;
+
+	const XMFLOAT3& P = pate_position;
+	const XMFLOAT3  b = pate_half_extents;
+
+	// 中心差
+	float dx = C.x - P.x;
+	float dy = C.y - P.y;
+	float dz = C.z - P.z;
+
+	// 各軸オーバーラップ
+	float ox = (a.x + b.x) - fabsf(dx);
+	float oy = (a.y + b.y) - fabsf(dy);
+	float oz = (a.z + b.z) - fabsf(dz);
+
+	if (ox <= 0.0f || oy <= 0.0f || oz <= 0.0f) return;
+
+	// 最小貫入軸で押し戻し
+	float penetration;
+	XMFLOAT3 n{ 0,0,0 };
+
+	if (ox <= oy && ox <= oz) { penetration = ox; n.x = (dx >= 0.0f) ? 1.0f : -1.0f; }
+	else if (oy <= oz) { penetration = oy; n.y = (dy >= 0.0f) ? 1.0f : -1.0f; }
+	else { penetration = oz; n.z = (dz >= 0.0f) ? 1.0f : -1.0f; }
+
+	// パテは運動学的（無限質量）として S のみ移動
+	S.pos.x += n.x * penetration;
+	S.pos.y += n.y * penetration;
+	S.pos.z += n.z * penetration;
+
+	// 速度反射
+	float relN = S.vel.x * n.x + S.vel.y * n.y + S.vel.z * n.z;
+	if (relN < 0.0f)
+	{
+		float e = std::clamp(std::min(S.restitution, pate_restitution), 0.0f, 1.0f);
+		float j = -(1.0f + e) * relN; // pate は無限質量
+		S.vel.x += n.x * j;
+		S.vel.y += n.y * j;
+		S.vel.z += n.z * j;
+	}
+}
+
+bool IsIntersectAABB(
+	const DirectX::XMFLOAT3& posA, const DirectX::XMFLOAT3& halfA,
+	const DirectX::XMFLOAT3& posB, const DirectX::XMFLOAT3& halfB)
+{
+	using namespace DirectX;
+
+	// 各軸方向での距離を計算
+	float dx = fabs(posA.x - posB.x);
+	float dy = fabs(posA.y - posB.y);
+	float dz = fabs(posA.z - posB.z);
+
+	// 各軸で重なっているかチェック
+	if (dx > (halfA.x + halfB.x)) return false;
+	if (dy > (halfA.y + halfB.y)) return false;
+	if (dz > (halfA.z + halfB.z)) return false;
+
+	// すべての軸で重なっていれば交差している
+	return true;
+}
+
+void framework::CheckKusiPattyCollision()
+{
+	using namespace DirectX;
+
+	for (auto& patty : patties)
+	{
+		if (patty.isStuck)
+		{
+			// すでに刺さっている場合は無視（動かない）
+			continue;
+		}
+
+		bool hit = IsIntersectAABB(kusi.pos, kusi.half_extents, patty.pos, patty.half_extents);
+		patty.isColliding = hit;
+
+		if (hit)
+		{
+			// 串に刺さった状態にする
+			patty.isStuck = true;
+
+			// 衝突時に串の位置へ吸着（例：串の先端位置に固定）
+			// kusiの前方方向を仮にZ軸正方向とした場合：
+		/*	XMFLOAT3 stickOffset = { 0.0f, 0.0f, kusi.half_extents.z + patty.half_extents.z };
+			patty.pos = {
+				kusi.pos.x + stickOffset.x,
+				kusi.pos.y + stickOffset.y,
+				kusi.pos.z + stickOffset.z
+			};*/
+
+			// 動きを止める
+			patty.vel = { 0.0f, 0.0f, 0.0f };
+		}
+		else
+		{
+			patty.isColliding = false;
+		}
+	}
+}
+
+void framework::initBulletWorld()
+{
+	m_btConfig = new btDefaultCollisionConfiguration();
+	m_btDispatcher = new btCollisionDispatcher(m_btConfig);
+	m_btBroadphase = new btDbvtBroadphase();
+	m_btSolver = new btSequentialImpulseConstraintSolver();
+
+	m_btWorld = new btDiscreteDynamicsWorld(
+		m_btDispatcher, m_btBroadphase, m_btSolver, m_btConfig);
+
+	// 重力（Y マイナス方向）
+	m_btWorld->setGravity(btVector3(0.0f, patty_gravity_y, 0.0f));
+
+	// パティ共通の形状（AABB）
+	m_pattyShape = new btBoxShape(btVector3(
+		patty_default_half_extents.x,
+		patty_default_half_extents.y,
+		patty_default_half_extents.z));
+
+	// 地面：Y = patty_ground_y の平面でもいいし、箱でもいい
+	{
+		const float slab_y_thickness = 0.01f;
+        const float slab_x_width     = 100.0f;         // 画面側と同じ値
+        const float slab_z_half      = ground_z_half_range;
+
+        // 半径（半サイズ）で指定
+        m_groundShape = new btBoxShape(btVector3(
+            slab_x_width * 0.5f,
+            slab_y_thickness * 0.5f,
+            slab_z_half));
+
+        btTransform tr;
+        tr.setIdentity();
+        tr.setOrigin(btVector3(
+            0.0f,
+            patty_ground_y + slab_y_thickness * 0.5f,  // 可視スラブと揃える
+            ground_z_center));                          // Z中心も合わせる
+
+        btDefaultMotionState* motion = new btDefaultMotionState(tr);
+        btRigidBody::btRigidBodyConstructionInfo info(
+            0.0f, motion, m_groundShape, btVector3(0, 0, 0)); // 質量0 = 静的
+
+        m_groundBody = new btRigidBody(info);
+        m_btWorld->addRigidBody(m_groundBody);
+	}
+}
+
+bool framework::uninitialize()
+{
+	return true;
+}
+
+framework::~framework()
+{
+}
