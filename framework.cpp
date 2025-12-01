@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 
 #include "shader.h"
 #include "texture.h"
@@ -10,6 +10,9 @@
 #define BT_NO_SIMD_OPERATOR_OVERLOADS
 #include <bullet/btBulletDynamicsCommon.h>
 
+int menu_count = 0;
+
+const int CheckMenu(const int* a, const int* b, int size);
 
 framework::framework(HWND hwnd) : hwnd(hwnd)
 {
@@ -343,16 +346,39 @@ bool framework::initialize()
 
 	initBulletWorld();   // ★ 追加
 
+	menu_count = 0;
 	return true;
 }
 
 void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 {
+
+	if (kusi.pos.y + 0.028 <= patty_ground_y) // +の数値はkusiの位置調整のため
+	{
+		kusi.kusi_End = true;
+		kusi.move = false;
+	}
+
+	if (kusi.kusi_End)
+	{
+		gameEnd = CheckMenu(kusi_menu, karimenu, MENU_MAX);
+	}
+
+	camera_focus.y += wheel * 0.0005f;
+
+	if (camera_focus.y < 0.283f)
+	{
+		camera_focus.y = 0.283f;
+	}
+
+	wheel = 0.0f; // 処理したらリセットする
+
 	static bool prev_down = false;
 	bool now_down = (GetAsyncKeyState(VK_DOWN) & 0x8000);
 
 	if (now_down && !prev_down) { // 押した瞬間だけ反応
 		kusi.move = !kusi.move;               // トグル
+		hitStop = !hitStop;
 	}
 
 	prev_down = now_down; // 状態保存
@@ -362,26 +388,26 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		kusi.pos.y -= 0.0005;
 	}
 
-	if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
-	{
-		// ヒットトップ開始
-		if (!hitStop)
-		{
-			hitStop = true;
-			hitStopLastSeconds = hitStopSecondsLength;
-		}
-	}
+	//if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+	//{
+	//	// ヒットトップ開始
+	//	if (!hitStop)
+	//	{
+	//		hitStop = true;
+	//		hitStopLastSeconds = hitStopSecondsLength;
+	//	}
+	//}
 
-	if (hitStop)
-	{
-		// ヒットストップ時間のカウントダウン
-		hitStopLastSeconds -= elapsed_time;
-		if (hitStopLastSeconds <= 0)
-		{
-			hitStopLastSeconds = 0.0f;
-			hitStop = false;
-		}
-	}
+	//if (hitStop)
+	//{
+	//	// ヒットストップ時間のカウントダウン
+	//	hitStopLastSeconds -= elapsed_time;
+	//	if (hitStopLastSeconds <= 0)
+	//	{
+	//		hitStopLastSeconds = 0.0f;
+	//		hitStop = false;
+	//	}
+	//}
 
 	if (!bun_spawned_initial)
 	{
@@ -394,8 +420,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		bun_spawned_initial = true;
 	}
 
-	if (!hitStop)
-	{
+
 		if (!patty_spawned_initial)
 		{
 			add_patty({ 0.0f, 1.3f, translation.z }, // 位置（必要なら調整）
@@ -411,6 +436,35 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 			m_btWorld->setGravity(btVector3(0, patty_gravity_y, 0));
 
 
+			// ★ 追加: パテの位置を Bullet のボディに同期させる
+			if (!hitStop && m_pateBody)
+			{
+				// 前回位置を保存するための変数をstaticで用意（またはメンバ変数にする）
+				static DirectX::XMFLOAT3 prev_pate_pos = pate_position;
+
+				// 速度の計算: (現在位置 - 前回位置) / 経過時間
+				if (elapsed_time > 0.0f)
+				{
+					btVector3 currentPos(pate_position.x, pate_position.y, pate_position.z);
+					btVector3 prevPos(prev_pate_pos.x, prev_pate_pos.y, prev_pate_pos.z);
+
+					// 速度ベクトル
+					btVector3 velocity = (currentPos - prevPos) / elapsed_time;
+
+					// Kinematic物体に速度を設定（これで衝突相手に勢いが伝わります）
+					m_pateBody->setLinearVelocity(velocity);
+				}
+
+				// 位置の反映
+				btTransform tr;
+				tr.setIdentity();
+				tr.setOrigin(btVector3(pate_position.x, pate_position.y, pate_position.z));
+				m_pateBody->getMotionState()->setWorldTransform(tr);
+
+				// 現在位置を保存
+				prev_pate_pos = pate_position;
+			}
+
 			// 1/60固定ステップで回す例（最大サブステップ10回）
 			m_btWorld->stepSimulation(elapsed_time, 10, 1.0f / 60.0f);
 
@@ -418,6 +472,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 			for (auto& P : patties)
 			{
 				if (!P.body) continue;
+				if (hitStop) continue;
 
 				btTransform tr;
 				P.body->getMotionState()->getWorldTransform(tr);
@@ -427,6 +482,38 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 
 				btQuaternion q = tr.getRotation();
 				P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
+
+				//////////////////////////////バグを出す原因かも
+				//resolve_pate_collision(P);
+
+				////// ★ 修正済みの位置
+				//tr.setOrigin(btVector3(P.pos.x, P.pos.y, P.pos.z));
+				//P.body->setWorldTransform(tr);
+				//P.body->getMotionState()->setWorldTransform(tr);
+				////P.body->setLinearVelocity(btVector3(P.vel.x, P.vel.y, P.vel.z));
+
+				/////////////////////////////////////
+			}
+
+			for (auto& C : cheeses)
+			{
+				if (!C.body) continue;
+				if (hitStop) continue;
+
+				// 串に刺さっている場合は、串の動きに追従させるなどの処理が必要だが
+				// ここでは物理演算の結果を取得するだけにする（Stuck時は物理無効化などを想定）
+				if (C.isStuck) {
+					// 串と一緒に動かすならここに追従処理
+					// C.pos.y = kusi.pos.y + offset... 等
+					continue;
+				}
+
+				btTransform tr;
+				C.body->getMotionState()->getWorldTransform(tr);
+				btVector3 pos = tr.getOrigin();
+				C.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
+				btQuaternion q = tr.getRotation();
+				C.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
 			}
 		}
 
@@ -441,6 +528,13 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 #ifdef USE_IMGUI
 		ImGui::Begin("ImGUI");
 		calculate_frame_stats(); // フレームごとに呼ぶ
+
+		if (gameEnd == 0)
+			ImGui::Text("gameEnd = 0 : Defult");
+		else if (gameEnd == 1)
+			ImGui::Text("gameEnd = 1 : Game Clear");
+		else if (gameEnd == 2)
+			ImGui::Text("gameEnd = 2 : Game Over");
 
 		ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
 
@@ -501,6 +595,17 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		ImGui::SameLine();
 		if (ImGui::Button("Clear Patties")) { patties.clear(); }
 		ImGui::Text("Count: %d", (int)patties.size());
+
+		if (ImGui::Button("Add 1 Cheese"))
+		{
+			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Clear Cheeses")) {
+			// 本当はBulletからも削除が必要だが簡易的にクリア
+			cheeses.clear();
+		}
+
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("[Pate Collider]");
@@ -565,11 +670,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		ImGui::SliderAngle("Yaw (rotateY)", &rotateY, -180.0f, 180.0f);
 		ImGui::SliderAngle("Pitch (rotateX)", &rotateX, -89.0f, 89.0f);
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Ground Z Range]");
-		ImGui::Checkbox("Show Range", &ground_range_visible);
-		ImGui::DragFloat("Center Z", &ground_z_center, 0.01f, -10.0f, 10.0f, "%.3f");
-		ImGui::DragFloat("Half Range", &ground_z_half_range, 0.01f, 0.0f, 10.0f, "%.3f");
+		
 
 		ImGui::SliderFloat("kusi Y", &kusi.pos.y, -30.0f, 30.0f, "%.3f");
 
@@ -599,33 +700,46 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		if (ImGui::Button("Large"))  bun.half_extents = { 0.14f, 0.06f, 0.14f };
 		ImGui::End();
 
-		ImGui::Begin("Patty Debug");
+		ImGui::Begin("Hit Check");
 		for (int i = 0; i < patties.size(); ++i)
 		{
 			ImGui::Text("Patty %d : %s", i,
 				patties[i].isStuck ? "STUCK" :
 				patties[i].isColliding ? "HIT" : "FREE");
 		}
+		for (int i = 0; i < cheeses.size(); ++i)
+		{
+			ImGui::Text("Cheese %d : %s", i,
+				cheeses[i].isStuck ? "STUCK" :
+				cheeses[i].isColliding ? "HIT" : "FREE");
+		}
 		ImGui::End();
 
+		ImGui::Begin("Menu Debug");
+
+		for (int i = 0; i < 10; ++i) {
+			ImGui::Text("kusi menu %d : %d", i, kusi_menu[i]);
+		}
+
+		ImGui::End();
+
+		ImGui::Begin("Menu");
+
+		for (int i = 0; i < 10; ++i) {
+			ImGui::Text("menu %d : %d", i, karimenu[i]);
+		}
+
+		ImGui::End();
+
+		
 #endif
 		// ★ ここを追加：毎フレーム物理更新
 		//simulate_patties(elapsed_time);
 		
 		simulate_bun(elapsed_time);
-
+		CheckKusiCheeseCollision();
 		CheckKusiPattyCollision();
-		//for (auto& patty : patties)
-		//{
-		//	if (patty.isStuck)
-		//		continue; // ← 刺さってる場合は動かさない
-
-		//	// 通常の物理更新（例）
-		//	patty.pos.x += patty.vel.x * elapsed_time;
-		//	patty.pos.y += patty.vel.y * elapsed_time;
-		//	patty.pos.z += patty.vel.z * elapsed_time;
-		//}
-	}
+	
 }
 void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 {
@@ -808,15 +922,15 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 	for (const auto& P : patties)
 	{
 		using namespace DirectX;
-		XMMATRIX T = XMMatrixTranslation(P.pos.x, P.pos.y, P.pos.z);
-		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f);
+		XMMATRIX T = XMMatrixTranslation(P.pos.x, P.pos.y - P.half_extents.y, P.pos.z);
+		XMMATRIX S = XMMatrixScaling(0.34f, 0.34f, 0.34f);
 
 		XMVECTOR q = XMLoadFloat4(&P.rotQuat);
 		XMMATRIX Rp = XMMatrixRotationQuaternion(q);  // ★ パティ個別の回転
 
 		XMFLOAT4X4 world;
-		XMStoreFloat4x4(&world, C * S * R * Rp * T);  // 好きな順で調整
-
+		//XMStoreFloat4x4(&world, C * S * R * Rp * T);  // 好きな順で調整
+		XMStoreFloat4x4(&world, C* S* Rp* T);
 		skinned_meshes[2]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
 	}
 
@@ -847,13 +961,16 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
 			XMFLOAT4X4 world_box;
-			XMStoreFloat4x4(&world_box, C* Sbox* R* Rp* Tbox);
+		//	XMStoreFloat4x4(&world_box, C* Sbox* R* Rp* Tbox);
+			XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
 
 			// 半透明で描画（線ではなく中身あり。嫌ならアルファ上げ下げする）
 			skinned_meshes[6]->render(immediate_context.Get(), world_box,
 				{ 1.0f, 0.2f, 0.2f, 0.35f }, nullptr, true);
 		}
 	}
+
+
 
 	//=== skinned_meshes[3]
 	{
@@ -876,24 +993,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		flat_shading = prev_flat;
 	}
 
-	//{
-	//	using namespace DirectX;
-	//	DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
-	//		translation_object3.x,
-	//		translation_object3.y,
-	//		translation_object3.z
-	//	);
-	//	DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
-	//	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
-	//		rotation_object3.x,
-	//		rotation_object3.y,
-	//		rotation_object3.z
-	//	);
-	//	DirectX::XMFLOAT4X4 world;
-	//	XMStoreFloat4x4(&world, C * Scale * R * T);
-	//	skinned_meshes[5]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
-	//}
-
+	
 	//// === skinned_meshes[4]（アニメーションなし）===
 	///変更箇所
 
@@ -1023,44 +1123,109 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		skinned_meshes[6]->render(immediate_context.Get(), world_box, bun_collider_color, nullptr, true);
 	}
 
-	// ：地面 Z
-	if (ground_range_visible)
+
+	for (const auto& cheese : cheeses)
 	{
 		using namespace DirectX;
+		// C.pos ではなく cheese.pos に変更 - P.half_extents.y
+		XMMATRIX T = XMMatrixTranslation(cheese.pos.x, cheese.pos.y - cheese.half_extents.y, cheese.pos.z);
+		XMMATRIX S = XMMatrixScaling(0.3f, 0.35f, 0.3f);
 
+		// C.rotQuat ではなく cheese.rotQuat に変更
+		XMVECTOR q = XMLoadFloat4(&cheese.rotQuat);
+		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
+
+		XMFLOAT4X4 world;
+		// ここにある 'C' は、外側で定義されている「座標変換行列」を指すようになるのでエラーが消えます
+		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
+
+		XMStoreFloat4x4(&world, C* S* Rp* T);
+
+		// skinned_meshes[10] が Cheese
+		skinned_meshes[10]->render(immediate_context.Get(), world, material_color, nullptr, true);
+	}
+
+	
+	if (patty_collider_visible) // フラグはPattyと共用
+	{
+		using namespace DirectX;
 		XMFLOAT3 cubeDim = {
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
 			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
 			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
 		};
 
-		const float slab_y_thickness = 0.01f;
-		const float slab_x_width = 100.0f;
-		const float slab_z_depth = 2.0f * ground_z_half_range;
+		// 変数名を 'C' から 'cheese' に変更して、行列 'C' と区別する
+		for (const auto& cheese : cheeses)
+		{
+			const float hx = cheese.half_extents.x;
+			const float hy = cheese.half_extents.y;
+			const float hz = cheese.half_extents.z;
 
-		XMMATRIX Sslab = XMMatrixScaling(
-			slab_x_width / cubeDim.x,
-			slab_y_thickness / cubeDim.y,
-			slab_z_depth / cubeDim.z
-		);
+			XMMATRIX Sbox = XMMatrixScaling((2.0f * hx) / cubeDim.x, (2.0f * hy) / cubeDim.y, (2.0f * hz) / cubeDim.z);
 
-		XMMATRIX Tslab = XMMatrixTranslation(
-			0.0f,
-			patty_ground_y + slab_y_thickness * 0.5f,
-			ground_z_center
-		);
+			// cheese.pos を使用
+			XMMATRIX Tbox = XMMatrixTranslation(cheese.pos.x, cheese.pos.y, cheese.pos.z);
 
-		XMFLOAT4X4 world_slab;
-		XMStoreFloat4x4(&world_slab, C * Sslab * Tslab);
+			// cheese.rotQuat を使用
+			XMVECTOR q = XMLoadFloat4(&cheese.rotQuat);
+			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
-		skinned_meshes[6]->render(
-			immediate_context.Get(),
-			world_slab,
-			ground_range_color,
-			nullptr,
-			true
-		);
+			XMFLOAT4X4 world_box;
+			// これで 行列C * 行列Sbox... という正しい計算になります
+		//	XMStoreFloat4x4(&world_box, C * Sbox * R * Rp * Tbox);
+			XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
+
+			// 黄色っぽく表示
+			skinned_meshes[6]->render(immediate_context.Get(), world_box, { 1.0f, 1.0f, 0.0f, 0.35f }, nullptr, true);
+		}
 	}
+
+	// ★ Buns_under 描画
+	{
+		using namespace DirectX;
+		XMMATRIX T = XMMatrixTranslation(bunUnder.pos.x, bunUnder.pos.y, bunUnder.pos.z);
+		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f); // 他のモデルとスケールを合わせる
+
+		XMVECTOR q = XMLoadFloat4(&bunUnder.rotQuat);
+		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
+
+		XMFLOAT4X4 world;
+		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
+		XMStoreFloat4x4(&world, C* S* Rp* T);
+		// skinned_meshes[9] が Buns_under
+		skinned_meshes[9]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
+	}
+
+	// ★ Buns_under コライダー可視化 (bun_collider_visibleと連動させる例)
+	if (bun_collider_visible)
+	{
+		using namespace DirectX;
+		XMFLOAT3 cubeDim = {
+			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
+			skinned_meshes[6]->bounding_box[1].y - skinned_meshes[6]->bounding_box[0].y,
+			skinned_meshes[6]->bounding_box[1].z - skinned_meshes[6]->bounding_box[0].z
+		};
+
+		const float hx = bunUnder.half_extents.x;
+		const float hy = bunUnder.half_extents.y;
+		const float hz = bunUnder.half_extents.z;
+
+		XMMATRIX Sbox = XMMatrixScaling((2.0f * hx) / cubeDim.x, (2.0f * hy) / cubeDim.y, (2.0f * hz) / cubeDim.z);
+		XMMATRIX Tbox = XMMatrixTranslation(bunUnder.pos.x, bunUnder.pos.y, bunUnder.pos.z);
+
+		XMFLOAT4X4 world_box;
+
+		XMVECTOR q = XMLoadFloat4(&bunUnder.rotQuat);
+		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
+		//XMStoreFloat4x4(&world_box, C * Sbox * R * Tbox); // 回転Rpは初期0なのでRのみ考慮でもOK
+
+		XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
+
+		// 青っぽく表示
+		skinned_meshes[6]->render(immediate_context.Get(), world_box, { 0.2f, 0.2f, 1.0f, 0.35f }, nullptr, true);
+	}
+	
 
 	// BOUNDING_BOX
 	{
@@ -1186,6 +1351,16 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 	UINT sync_interval{ 0 };
 	swap_chain->Present(sync_interval, 0);
 }
+
+const int CheckMenu(const int* a, const int* b, int size)
+{
+	for (int i = 0; i < size; i++)
+	{
+		if (a[i] != b[i]) return 2;
+	}
+	return 1;
+}
+
 void framework::add_patty(const DirectX::XMFLOAT3& p,
 	const DirectX::XMFLOAT3& half_extents,
 	float mass,
@@ -1210,6 +1385,8 @@ void framework::add_patty(const DirectX::XMFLOAT3& p,
 	btDefaultMotionState* motion = new btDefaultMotionState(tr);
 	btRigidBody::btRigidBodyConstructionInfo info(mass, motion, m_pattyShape, inertia);
 	info.m_restitution = restitution;
+
+	info.m_friction = 0.5f;
 
 	btRigidBody* body = new btRigidBody(info);
 	m_btWorld->addRigidBody(body);
@@ -1288,17 +1465,7 @@ void framework::simulate_bun(float dt)
 	bun.pos.y += bun.vel.y * dt;
 	bun.pos.z += bun.vel.z * dt;
 
-	// 地面との衝突（Z 範囲内のときだけ有効）
-	const bool ground_active = (fabsf(bun.pos.z - ground_z_center) <= ground_z_half_range);
-	if (ground_active)
-	{
-		const float bottom = bun.pos.y - bun.half_extents.y;
-		if (bottom < patty_ground_y)
-		{
-			bun.pos.y += (patty_ground_y - bottom);
-			if (bun.vel.y < 0) bun.vel.y = -bun.vel.y * (bun.restitution);
-		}
-	}
+	
 
 	if (pate_collider_enabled)
 	{
@@ -1398,20 +1565,11 @@ void framework::simulate_patties(float dt)
 		float minY = P.pos.y - P.half_extents.y;
 		if (minY < patty_ground_y)
 		{
-			// --- 追加：Z レンジ内判定 ---
-			const bool ground_active_along_z =
-				fabsf(P.pos.z - ground_z_center) <= ground_z_half_range;
+			
 
 			float minY = P.pos.y - P.half_extents.y;
 
-			// --- 変更：Z レンジ内のときだけ地面と当たる ---
-			if (ground_active_along_z && (minY < patty_ground_y))
-			{
-				P.pos.y = patty_ground_y + P.half_extents.y;
-				if (P.vel.y < 0.0f)
-					P.vel.y = -P.vel.y * std::clamp(P.restitution, 0.0f, 1.0f);
-				if (fabsf(P.vel.y) < 0.05f) P.vel.y = 0.0f;
-			}
+			
 		}
 	}
 
@@ -1421,63 +1579,9 @@ void framework::simulate_patties(float dt)
 		for (int j = i + 1; j < n; ++j)
 			resolve_pair(i, j);
 
-	for (auto& P : patties)
-	{
-		if (P.isStuck)
-			continue; // ← 刺さってる場合は動かさない
 
-		resolve_pate_collision(P);
-		//resolve_kusi_collision(P);
-	}
 }
-void framework::resolve_pate_collision(Patty& S)
-{
-	using namespace DirectX;
 
-	if (!pate_collider_enabled) return;
-
-	const XMFLOAT3& C = S.pos;
-	const XMFLOAT3  a = S.half_extents;
-
-	const XMFLOAT3& P = pate_position;
-	const XMFLOAT3  b = pate_half_extents;
-
-	// 中心差
-	float dx = C.x - P.x;
-	float dy = C.y - P.y;
-	float dz = C.z - P.z;
-
-	// 各軸オーバーラップ
-	float ox = (a.x + b.x) - fabsf(dx);
-	float oy = (a.y + b.y) - fabsf(dy);
-	float oz = (a.z + b.z) - fabsf(dz);
-
-	if (ox <= 0.0f || oy <= 0.0f || oz <= 0.0f) return;
-
-	// 最小貫入軸で押し戻し
-	float penetration;
-	XMFLOAT3 n{ 0,0,0 };
-
-	if (ox <= oy && ox <= oz) { penetration = ox; n.x = (dx >= 0.0f) ? 1.0f : -1.0f; }
-	else if (oy <= oz) { penetration = oy; n.y = (dy >= 0.0f) ? 1.0f : -1.0f; }
-	else { penetration = oz; n.z = (dz >= 0.0f) ? 1.0f : -1.0f; }
-
-	// パテは運動学的（無限質量）として S のみ移動
-	S.pos.x += n.x * penetration;
-	S.pos.y += n.y * penetration;
-	S.pos.z += n.z * penetration;
-
-	// 速度反射
-	float relN = S.vel.x * n.x + S.vel.y * n.y + S.vel.z * n.z;
-	if (relN < 0.0f)
-	{
-		float e = std::clamp(std::min(S.restitution, pate_restitution), 0.0f, 1.0f);
-		float j = -(1.0f + e) * relN; // pate は無限質量
-		S.vel.x += n.x * j;
-		S.vel.y += n.y * j;
-		S.vel.z += n.z * j;
-	}
-}
 
 bool IsIntersectAABB(
 	const DirectX::XMFLOAT3& posA, const DirectX::XMFLOAT3& halfA,
@@ -1519,21 +1623,81 @@ void framework::CheckKusiPattyCollision()
 			// 串に刺さった状態にする
 			patty.isStuck = true;
 
-			// 衝突時に串の位置へ吸着（例：串の先端位置に固定）
-			// kusiの前方方向を仮にZ軸正方向とした場合：
-		/*	XMFLOAT3 stickOffset = { 0.0f, 0.0f, kusi.half_extents.z + patty.half_extents.z };
-			patty.pos = {
-				kusi.pos.x + stickOffset.x,
-				kusi.pos.y + stickOffset.y,
-				kusi.pos.z + stickOffset.z
-			};*/
 
 			// 動きを止める
 			patty.vel = { 0.0f, 0.0f, 0.0f };
+			kusi_menu[menu_count] = 1;
+			menu_count += 1;
 		}
 		else
 		{
 			patty.isColliding = false;
+		}
+	}
+}
+
+void framework::add_cheese(const DirectX::XMFLOAT3& p,
+    const DirectX::XMFLOAT3& half_extents,
+    float mass,
+    float restitution)
+{
+    Cheese obj{};
+    obj.pos = p;
+    obj.vel = { 0.0f, 0.0f, 0.0f };
+    obj.half_extents = half_extents;
+    obj.mass = mass;
+    obj.restitution = restitution;
+
+    // Bullet rigid body 作成
+    btTransform tr;
+    tr.setIdentity();
+    tr.setOrigin(btVector3(p.x, p.y, p.z));
+
+    btVector3 inertia(0, 0, 0);
+    if (mass > 0.0f)
+        m_cheeseShape->calculateLocalInertia(mass, inertia);
+
+    btDefaultMotionState* motion = new btDefaultMotionState(tr);
+    btRigidBody::btRigidBodyConstructionInfo info(mass, motion, m_cheeseShape, inertia);
+    info.m_restitution = restitution;
+
+	info.m_friction = 0.5f;
+
+    btRigidBody* body = new btRigidBody(info);
+    m_btWorld->addRigidBody(body);
+
+    obj.body = body;
+
+    cheeses.push_back(obj);
+    m_cheeseBodies.push_back(body);
+}
+
+
+void framework::CheckKusiCheeseCollision()
+{
+	using namespace DirectX;
+
+	for (auto& cheese : cheeses)
+	{
+		if (cheese.isStuck) continue;
+
+		// IsIntersectAABB は既存の関数を利用
+		bool hit = IsIntersectAABB(kusi.pos, kusi.half_extents, cheese.pos, cheese.half_extents);
+		cheese.isColliding = hit;
+
+		if (hit)
+		{
+			cheese.isStuck = true;
+		
+		
+			if (cheese.body) {
+				cheese.body->setLinearVelocity(btVector3(0, 0, 0));
+				cheese.body->setAngularVelocity(btVector3(0, 0, 0));
+				
+				cheese.body->setGravity(btVector3(0, 0, 0));
+			}
+			kusi_menu[menu_count] = 2;
+			menu_count += 1;
 		}
 	}
 }
@@ -1557,31 +1721,68 @@ void framework::initBulletWorld()
 		patty_default_half_extents.y,
 		patty_default_half_extents.z));
 
-	// 地面：Y = patty_ground_y の平面でもいいし、箱でもいい
+	//チーズ
+	m_cheeseShape = new btBoxShape(btVector3(
+		cheese_default_half_extents.x,
+		cheese_default_half_extents.y,
+		cheese_default_half_extents.z));
+
+	// ★ Buns_under (静的剛体) の作成
 	{
-		const float slab_y_thickness = 0.01f;
-        const float slab_x_width     = 100.0f;         // 画面側と同じ値
-        const float slab_z_half      = ground_z_half_range;
+		// サイズ設定 (見た目に合わせて調整)
+		bunUnder.half_extents = { 0.045f, 0.0020f, 0.045f };
 
-        // 半径（半サイズ）で指定
-        m_groundShape = new btBoxShape(btVector3(
-            slab_x_width * 0.5f,
-            slab_y_thickness * 0.5f,
-            slab_z_half));
+		// 位置設定 (地面の上に置く)
+		// x, z は他の具材が落ちてくる位置(-0.3, -10.0)に合わせる
+		bunUnder.pos = { -0.3f, patty_ground_y + bunUnder.half_extents.y, -10.0f };
 
-        btTransform tr;
-        tr.setIdentity();
-        tr.setOrigin(btVector3(
-            0.0f,
-            patty_ground_y + slab_y_thickness * 0.5f,  // 可視スラブと揃える
-            ground_z_center));                          // Z中心も合わせる
+		// 形状作成
+		m_bunUnderShape = new btBoxShape(btVector3(
+			bunUnder.half_extents.x,
+			bunUnder.half_extents.y,
+			bunUnder.half_extents.z));
 
-        btDefaultMotionState* motion = new btDefaultMotionState(tr);
-        btRigidBody::btRigidBodyConstructionInfo info(
-            0.0f, motion, m_groundShape, btVector3(0, 0, 0)); // 質量0 = 静的
+		btTransform tr;
+		tr.setIdentity();
+		tr.setOrigin(btVector3(bunUnder.pos.x, bunUnder.pos.y, bunUnder.pos.z));
 
-        m_groundBody = new btRigidBody(info);
-        m_btWorld->addRigidBody(m_groundBody);
+		// 質量 0.0f = 静的 (動かない)
+		btDefaultMotionState* motion = new btDefaultMotionState(tr);
+		btRigidBody::btRigidBodyConstructionInfo info(0.0f, motion, m_bunUnderShape, btVector3(0, 0, 0));
+
+		info.m_restitution = 0.0f; // 跳ね返り係数
+		info.m_friction = 10.1f;    // 摩擦 (具材が滑り落ちないように少し高め)
+
+		bunUnder.body = new btRigidBody(info);
+		m_btWorld->addRigidBody(bunUnder.body);
+	}
+
+	
+	
+	{
+		// パテの形状を作成 (pate_half_extentsを使用)
+		m_pateShape = new btBoxShape(btVector3(pate_half_extents.x, pate_half_extents.y, pate_half_extents.z));
+
+		btTransform startTransform;
+		startTransform.setIdentity();
+		startTransform.setOrigin(btVector3(pate_position.x, pate_position.y, pate_position.z));
+
+		// 質量0で作成（静的/キネマティック）
+		btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
+		btRigidBody::btRigidBodyConstructionInfo rbInfo(0.0f, myMotionState, m_pateShape, btVector3(0, 0, 0));
+
+		rbInfo.m_restitution = pate_restitution; // 反発係数を適用
+		rbInfo.m_friction = 0.5f;                // 摩擦係数（必要に応じて調整）
+
+		m_pateBody = new btRigidBody(rbInfo);
+
+		// キネマティックオブジェクトとして設定（物理演算で勝手に動かないが、プログラムから動かせる壁のような存在）
+		m_pateBody->setCollisionFlags(m_pateBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+
+		// 常にアクティブにする（動かしたときに他の物体を起こすため）
+		m_pateBody->setActivationState(DISABLE_DEACTIVATION);
+
+		m_btWorld->addRigidBody(m_pateBody);
 	}
 }
 
