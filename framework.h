@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <windows.h>
 #include <tchar.h>
@@ -54,9 +54,17 @@ CONST LONG SCREEN_HEIGHT{ 1080 };
 CONST BOOL FULLSCREEN{ TRUE };
 CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
+
+#define MENU_MAX 10
+
 class framework
 {
 public:
+
+	int gameEnd = 0; // 0 : 初期状態* 1 : ゲームクリア* 2 : ゲームオーバー
+
+	int karimenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
+
 
 	bool hitStop = false;
 
@@ -95,13 +103,17 @@ public:
 
 	// 共有の形状（全部同じ箱なら一個でよい）
 	btBoxShape* m_pattyShape = nullptr;
-	btCollisionShape* m_groundShape = nullptr;   // ← 追加
+	//btCollisionShape* m_groundShape = nullptr;   // ← 追加
+
+	// ★ 追加: パテ用の形状とボディ
+	btBoxShape* m_pateShape = nullptr;
+	btRigidBody* m_pateBody = nullptr;
 	
 	// Patty 用 rigid body のリスト（Patty とインデックス対応）
 	std::vector<btRigidBody*>           m_pattyBodies;
 
 	// 地面
-	btRigidBody* m_groundBody = nullptr;
+	
 
 
 	struct scene_constants
@@ -165,7 +177,7 @@ public:
 	bool patty_sim_enabled = true;
 	float patty_gravity_y = -0.8f; // 下向き重力（単位系に応じて微調整）
 	float patty_ground_y = 0.235f; // 地面/テーブルの Y（シーンに合わせて）
-	DirectX::XMFLOAT3 patty_default_half_extents{ 0.035f, 0.012f, 0.020f };
+	DirectX::XMFLOAT3 patty_default_half_extents{ 0.035f, 0.008f, 0.038f };
 	float patty_default_mass = 1.0f;
 	float patty_default_restitution = 0.0f; // Patty 同士の最小反発係数
 	// 生成時のX
@@ -183,10 +195,53 @@ public:
 	void resolve_pair(int ia, int ib);
 	//////////////////////////////////
 
-	float ground_z_center = -10.0f;
-	float ground_z_half_range = 0.010f;  //地面
-	bool  ground_range_visible = true;
-	DirectX::XMFLOAT4 ground_range_color{ 0.2f, 0.6f, 1.0f, 0.20f };
+	struct Cheese {
+		DirectX::XMFLOAT3 pos;
+		DirectX::XMFLOAT3 vel;
+		DirectX::XMFLOAT3 half_extents;
+		float mass;
+		float restitution;
+
+		bool isColliding = false;
+		bool isStuck = false;
+
+		btRigidBody* body = nullptr;
+		DirectX::XMFLOAT4 rotQuat{ 0,0,0,1 };
+	};
+
+	std::vector<Cheese> cheeses; // チーズ一覧
+
+	// Bullet用形状
+	btBoxShape* m_cheeseShape = nullptr;
+	std::vector<btRigidBody*> m_cheeseBodies;
+
+	// パラメータ
+	DirectX::XMFLOAT3 cheese_default_half_extents{ 0.035f, 0.009f, 0.048f }; 
+	float cheese_default_mass = 0.5f;
+	float cheese_default_restitution = 0.0f;
+
+	// 関数
+	void add_cheese(const DirectX::XMFLOAT3& pos,
+		const DirectX::XMFLOAT3& half_extents,
+		float mass,
+		float restitution);
+
+	void CheckKusiCheeseCollision(); // 串との当たり判定
+
+
+	struct BunUnder {
+		DirectX::XMFLOAT3 pos;
+		DirectX::XMFLOAT3 half_extents;
+		DirectX::XMFLOAT4 rotQuat{ 0, 0, 0, 1 }; // 回転
+		btRigidBody* body = nullptr;
+	};
+	BunUnder bunUnder;
+
+	// Bullet用
+	btBoxShape* m_bunUnderShape = nullptr;
+
+
+	
 	Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffers[8];
 
 	DirectX::XMFLOAT3 camera_position{ -8.8f, 7.5f, 0.0f };
@@ -279,10 +334,12 @@ public:
 		DirectX::XMFLOAT3 pos{ -0.3f, 1.0f, -10.0f };
 		DirectX::XMFLOAT3 half_extents{ 0.01f, 0.01f, 0.01f };
 
+		bool kusi_End = false;
 		bool move = false;
 	};
 	Kusi kusi;
 
+	int kusi_menu[MENU_MAX] = { 0 }; // 0 : 初期状態　1 : 肉　2 : チーズ　3 : クラウン　4 : ヒール
 	//DirectX::XMFLOAT3 kusi_position{ -0.3f, 1.0f, -10.0f };
 	//DirectX::XMFLOAT3 kusi_half{ 0.01f, 0.01f, 0.01f };
 	//bool kusi = false;
@@ -292,7 +349,7 @@ public:
 	bool patty_collider_visible = true;
 	DirectX::XMFLOAT4 patty_collider_color{ 1.0f, 0.2f, 0.2f, 0.35f };
 	// コライダー中心は pate_position（既存）を使用
-	DirectX::XMFLOAT3 pate_half_extents{ 0.060f, 0.025f, 0.015f }; // X=幅/2, Y=厚み/2, Z=奥行/2
+	DirectX::XMFLOAT3 pate_half_extents{ 0.01f, 0.002f, 0.005f }; // X=幅/2, Y=厚み/2, Z=奥行/2
 	float pate_restitution = 0.0f; // 反発
 	float pate_plane_y = 0.373f; // マウス追従に使う平面の高さ（pate_position.y に反映）
 	//////////////////////////
@@ -301,8 +358,7 @@ public:
 	float patties_z_offset_prev = 0.0f; // 前フレーム値（差分適用に利用）
 	int patty_selected_index = -1; // 選択中（-1: なし）
 	/////////////////////////////
-	// 1体の Patty（球）と pate（AABB）の衝突解決
-	void resolve_pate_collision(struct Patty& S);
+	
 
 
 	void CheckKusiPattyCollision();
@@ -381,6 +437,11 @@ public:
 #endif
 		switch (msg)
 		{
+			//マウスホイールの入力を受け取る
+		case WM_MOUSEWHEEL:
+			wheel += GET_WHEEL_DELTA_WPARAM(wparam);
+			break;
+
 		case WM_PAINT:
 		{
 			PAINTSTRUCT ps;
@@ -448,3 +509,5 @@ private:
 		}
 	}
 };
+
+
