@@ -56,12 +56,33 @@ CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
 
 #define MENU_MAX 10
+#define SPAWN_MAX 5
 
 class framework
 {
 public:
+	
+	float StartTimer = 0;
+	
+	std::vector<int> spawnList;  // 0 = patty, 1 = cheese
+
+	int spawnIndex = 0;
+	
+	const float interval = 0.3f;
+	
+	bool allSpawn = true;
+
+	int callCount = 0;
+
+	float coolTimer = 0.0f;
 
 	int gameEnd = 0; // 0 : 初期状態* 1 : ゲームクリア* 2 : ゲームオーバー
+	//  ゲームの状態管理
+	bool isSpawningPhase = true; // true: 積み上げ中, false: プレイ中
+
+	void EnablePhysicsForGameplay();
+
+	void CheckPateCollision();
 
 	int karimenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
 
@@ -175,7 +196,7 @@ public:
 
 	// グローバル物理パラメータ
 	bool patty_sim_enabled = true;
-	float patty_gravity_y = -0.8f; // 下向き重力（単位系に応じて微調整）
+	float patty_gravity_y = -0.3f; // 下向き重力（単位系に応じて微調整）
 	float patty_ground_y = 0.235f; // 地面/テーブルの Y（シーンに合わせて）
 	DirectX::XMFLOAT3 patty_default_half_extents{ 0.035f, 0.008f, 0.038f };
 	float patty_default_mass = 1.0f;
@@ -193,6 +214,9 @@ public:
 		float restitution);
 	void simulate_patties(float dt);
 	void resolve_pair(int ia, int ib);
+
+	void prepareSpawnList();
+	void Spwan(float dt);
 	//////////////////////////////////
 
 	struct Cheese {
@@ -509,5 +533,4 @@ private:
 		}
 	}
 };
-
 
