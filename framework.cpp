@@ -10,9 +10,12 @@
 #define BT_NO_SIMD_OPERATOR_OVERLOADS
 #include <bullet/btBulletDynamicsCommon.h>
 
+#include<random>
+
 int menu_count = 0;
 
 const int CheckMenu(const int* a, const int* b, int size);
+
 
 framework::framework(HWND hwnd) : hwnd(hwnd)
 {
@@ -346,12 +349,49 @@ bool framework::initialize()
 
 	initBulletWorld();   // ★ 追加
 
+	patties.clear();
+
+	cheeses.clear();
+
 	menu_count = 0;
+
+	prepareSpawnList();
+
+
 	return true;
 }
 
 void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 {
+	//if (allSpawn)
+	//{
+	//	coolTimer += elapsed_time;
+
+	//	// 0.1 秒経過ごとに発動
+	//	const float interval = 0.1f;
+
+	//	while (coolTimer >= interval && callCount >= SPAWN_MAX)
+	//	{
+	//		srand((unsigned int)time(nullptr));
+	//		coolTimer -= interval;  // 残り時間を繰り越し
+	//		switch (rand() % 2 == 0)
+	//		{
+	//		case 0:
+	//			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+	//			callCount++;
+	//			break;
+
+	//		case 1:
+	//			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+	//			callCount++;
+	//			break;
+	//		}
+	//	}
+	//	allSpawn = false;
+	//}
+
+	Spwan(elapsed_time);
+
 
 	if (kusi.pos.y + 0.028 <= patty_ground_y) // +の数値はkusiの位置調整のため
 	{
@@ -388,27 +428,6 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		kusi.pos.y -= 0.0005;
 	}
 
-	//if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
-	//{
-	//	// ヒットトップ開始
-	//	if (!hitStop)
-	//	{
-	//		hitStop = true;
-	//		hitStopLastSeconds = hitStopSecondsLength;
-	//	}
-	//}
-
-	//if (hitStop)
-	//{
-	//	// ヒットストップ時間のカウントダウン
-	//	hitStopLastSeconds -= elapsed_time;
-	//	if (hitStopLastSeconds <= 0)
-	//	{
-	//		hitStopLastSeconds = 0.0f;
-	//		hitStop = false;
-	//	}
-	//}
-
 	if (!bun_spawned_initial)
 	{
 		bun.exists = true;
@@ -421,325 +440,344 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 	}
 
 
-		if (!patty_spawned_initial)
+	if (!patty_spawned_initial)
+	{
+		add_patty({ 0.0f, 1.3f, translation.z }, // 位置（必要なら調整）
+			patty_default_half_extents,
+			patty_default_mass,
+			patty_default_restitution);
+		patty_spawned_initial = true;
+	}
+
+	// Bullet 物理ステップ
+	if (m_btWorld)
+	{
+		m_btWorld->setGravity(btVector3(0, patty_gravity_y, 0));
+
+
+		// ★ 追加: パテの位置を Bullet のボディに同期させる
+		if (!hitStop && m_pateBody)
 		{
-			add_patty({ 0.0f, 1.3f, translation.z }, // 位置（必要なら調整）
-				patty_default_half_extents,
-				patty_default_mass,
-				patty_default_restitution);
-			patty_spawned_initial = true;
+			// 前回位置を保存するための変数をstaticで用意（またはメンバ変数にする）
+			static DirectX::XMFLOAT3 prev_pate_pos = pate_position;
+
+			// 速度の計算: (現在位置 - 前回位置) / 経過時間
+			if (elapsed_time > 0.0f)
+			{
+				btVector3 currentPos(pate_position.x, pate_position.y, pate_position.z);
+				btVector3 prevPos(prev_pate_pos.x, prev_pate_pos.y, prev_pate_pos.z);
+
+				// 速度ベクトル
+				btVector3 velocity = (currentPos - prevPos) / elapsed_time;
+
+				// Kinematic物体に速度を設定（これで衝突相手に勢いが伝わります）
+				m_pateBody->setLinearVelocity(velocity);
+			}
+
+			// 位置の反映
+			btTransform tr;
+			tr.setIdentity();
+			tr.setOrigin(btVector3(pate_position.x, pate_position.y, pate_position.z));
+			m_pateBody->getMotionState()->setWorldTransform(tr);
+
+			// 現在位置を保存
+			prev_pate_pos = pate_position;
 		}
 
-		// Bullet 物理ステップ
-		if (m_btWorld)
+		// 1/60固定ステップで回す例（最大サブステップ10回）
+		m_btWorld->stepSimulation(elapsed_time, 10, 1.0f / 60.0f);
+
+		// Bullet → 自前 struct へ反映
+		for (auto& P : patties)
 		{
-			m_btWorld->setGravity(btVector3(0, patty_gravity_y, 0));
+			if (!P.body) continue;
+			if (hitStop) continue;
+
+			btTransform tr;
+			P.body->getMotionState()->getWorldTransform(tr);
+
+			btVector3 pos = tr.getOrigin();
+			P.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
+
+			btQuaternion q = tr.getRotation();
+			P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
 
 
-			// ★ 追加: パテの位置を Bullet のボディに同期させる
-			if (!hitStop && m_pateBody)
-			{
-				// 前回位置を保存するための変数をstaticで用意（またはメンバ変数にする）
-				static DirectX::XMFLOAT3 prev_pate_pos = pate_position;
+			//if (StartTimer >= 2000)
+			//{
+			//	btVector3 vel = P.body->getLinearVelocity();
+			//	vel.setX(0.0f);  // X方向を停止
+			//	vel.setZ(0.0f);  // Z方向を停止
+			//	P.body->setLinearVelocity(vel);
+			//}
+			//////////////////////////////バグを出す原因かも
+			//resolve_pate_collision(P);
 
-				// 速度の計算: (現在位置 - 前回位置) / 経過時間
-				if (elapsed_time > 0.0f)
-				{
-					btVector3 currentPos(pate_position.x, pate_position.y, pate_position.z);
-					btVector3 prevPos(prev_pate_pos.x, prev_pate_pos.y, prev_pate_pos.z);
+			////// ★ 修正済みの位置
+			//tr.setOrigin(btVector3(P.pos.x, P.pos.y, P.pos.z));
+			//P.body->setWorldTransform(tr);
+			//P.body->getMotionState()->setWorldTransform(tr);
+			////P.body->setLinearVelocity(btVector3(P.vel.x, P.vel.y, P.vel.z));
 
-					// 速度ベクトル
-					btVector3 velocity = (currentPos - prevPos) / elapsed_time;
-
-					// Kinematic物体に速度を設定（これで衝突相手に勢いが伝わります）
-					m_pateBody->setLinearVelocity(velocity);
-				}
-
-				// 位置の反映
-				btTransform tr;
-				tr.setIdentity();
-				tr.setOrigin(btVector3(pate_position.x, pate_position.y, pate_position.z));
-				m_pateBody->getMotionState()->setWorldTransform(tr);
-
-				// 現在位置を保存
-				prev_pate_pos = pate_position;
-			}
-
-			// 1/60固定ステップで回す例（最大サブステップ10回）
-			m_btWorld->stepSimulation(elapsed_time, 10, 1.0f / 60.0f);
-
-			// Bullet → 自前 struct へ反映
-			for (auto& P : patties)
-			{
-				if (!P.body) continue;
-				if (hitStop) continue;
-
-				btTransform tr;
-				P.body->getMotionState()->getWorldTransform(tr);
-
-				btVector3 pos = tr.getOrigin();
-				P.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
-
-				btQuaternion q = tr.getRotation();
-				P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
-
-				//////////////////////////////バグを出す原因かも
-				//resolve_pate_collision(P);
-
-				////// ★ 修正済みの位置
-				//tr.setOrigin(btVector3(P.pos.x, P.pos.y, P.pos.z));
-				//P.body->setWorldTransform(tr);
-				//P.body->getMotionState()->setWorldTransform(tr);
-				////P.body->setLinearVelocity(btVector3(P.vel.x, P.vel.y, P.vel.z));
-
-				/////////////////////////////////////
-			}
-
-			for (auto& C : cheeses)
-			{
-				if (!C.body) continue;
-				if (hitStop) continue;
-
-				// 串に刺さっている場合は、串の動きに追従させるなどの処理が必要だが
-				// ここでは物理演算の結果を取得するだけにする（Stuck時は物理無効化などを想定）
-				if (C.isStuck) {
-					// 串と一緒に動かすならここに追従処理
-					// C.pos.y = kusi.pos.y + offset... 等
-					continue;
-				}
-
-				btTransform tr;
-				C.body->getMotionState()->getWorldTransform(tr);
-				btVector3 pos = tr.getOrigin();
-				C.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
-				btQuaternion q = tr.getRotation();
-				C.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
-			}
+			/////////////////////////////////////
 		}
+
+		for (auto& C : cheeses)
+		{
+			if (!C.body) continue;
+			if (hitStop) continue;
+
+			// 串に刺さっている場合は、串の動きに追従させるなどの処理が必要だが
+			// ここでは物理演算の結果を取得するだけにする（Stuck時は物理無効化などを想定）
+			if (C.isStuck) {
+				// 串と一緒に動かすならここに追従処理
+				// C.pos.y = kusi.pos.y + offset... 等
+				continue;
+			}
+
+			btTransform tr;
+			C.body->getMotionState()->getWorldTransform(tr);
+			btVector3 pos = tr.getOrigin();
+			C.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
+			btQuaternion q = tr.getRotation();
+			C.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
+
+			//if (StartTimer >= 2000)
+			//{
+			//	btVector3 vel = C.body->getLinearVelocity();
+			//	vel.setX(0.0f);  // X方向を停止
+			//	vel.setZ(0.0f);  // Z方向を停止
+			//	C.body->setLinearVelocity(vel);
+			//}
+		}
+	}
 
 
 
 #ifdef USE_IMGUI
-		ImGui_ImplDX11_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
 #endif
 
 #ifdef USE_IMGUI
-		ImGui::Begin("ImGUI");
-		calculate_frame_stats(); // フレームごとに呼ぶ
+	ImGui::Begin("ImGUI");
+	calculate_frame_stats(); // フレームごとに呼ぶ
 
-		if (gameEnd == 0)
-			ImGui::Text("gameEnd = 0 : Defult");
-		else if (gameEnd == 1)
-			ImGui::Text("gameEnd = 1 : Game Clear");
-		else if (gameEnd == 2)
-			ImGui::Text("gameEnd = 2 : Game Over");
+	if (gameEnd == 0)
+		ImGui::Text("gameEnd = 0 : Defult");
+	else if (gameEnd == 1)
+		ImGui::Text("gameEnd = 1 : Game Clear");
+	else if (gameEnd == 2)
+		ImGui::Text("gameEnd = 2 : Game Over");
 
-		ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
+		ImGui::Text("gameEnd = 2 : Game Over");
 
-		ImGui::Checkbox("flat_shading", &flat_shading);
-		ImGui::Checkbox("Enable Dynamic Shader", &enable_dynamic_shader);
-		ImGui::Checkbox("Enable Dynamic Background", &enable_dynamic_background);
-		//ImGui::Checkbox("Enable RADIAL_BLUR", &enable_radial_blur);
-		ImGui::Checkbox("Enable Bloom", &enable_bloom);
+		ImGui::Text("StartTimer: %.2f", StartTimer);
 
-		ImGui::SliderFloat("light_direction.x", &light_direction.x, -1.0f, +1.0f);
-		ImGui::SliderFloat("light_direction.y", &light_direction.y, -1.0f, +1.0f);
-		ImGui::SliderFloat("light_direction.z", &light_direction.z, -1.0f, +1.0f);
+	ImGui::Checkbox("flat_shading", &flat_shading);
+	ImGui::Checkbox("Enable Dynamic Shader", &enable_dynamic_shader);
+	ImGui::Checkbox("Enable Dynamic Background", &enable_dynamic_background);
+	//ImGui::Checkbox("Enable RADIAL_BLUR", &enable_radial_blur);
+	ImGui::Checkbox("Enable Bloom", &enable_bloom);
 
-		// UNIT.32
-		ImGui::SliderFloat("extraction_threshold", &parametric_constants.extraction_threshold, +0.0f, +5.0f);
-		ImGui::SliderFloat("gaussian_sigma", &parametric_constants.gaussian_sigma, +0.0f, +10.0f);
-		ImGui::SliderFloat("exposure", &parametric_constants.exposure, +0.0f, +10.0f);
+	ImGui::SliderFloat("light_direction.x", &light_direction.x, -1.0f, +1.0f);
+	ImGui::SliderFloat("light_direction.y", &light_direction.y, -1.0f, +1.0f);
+	ImGui::SliderFloat("light_direction.z", &light_direction.z, -1.0f, +1.0f);
 
-		// RADIAL_BLUR
-		ImGui::DragFloat2("blur_center", &radial_blur_data.blur_center.x, 0.01f);
-		ImGui::SliderFloat("blur_strength", &radial_blur_data.blur_strength, +0.0f, +1.0f);
-		ImGui::SliderFloat("blur_radius", &radial_blur_data.blur_radius, +0.0f, +1.0f);
-		ImGui::SliderFloat("blur_decay", &radial_blur_data.blur_decay, +0.0f, +1.0f);
+	// UNIT.32
+	ImGui::SliderFloat("extraction_threshold", &parametric_constants.extraction_threshold, +0.0f, +5.0f);
+	ImGui::SliderFloat("gaussian_sigma", &parametric_constants.gaussian_sigma, +0.0f, +10.0f);
+	ImGui::SliderFloat("exposure", &parametric_constants.exposure, +0.0f, +10.0f);
 
-		// BLOOM
-		ImGui::SliderFloat("bloom_extraction_threshold", &bloomer->bloom_extraction_threshold, +0.0f, +5.0f);
-		ImGui::SliderFloat("bloom_intensity", &bloomer->bloom_intensity, +0.0f, +5.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 10)); // 内側の余白を増やす
-		ImGui::SliderFloat("Camera Distance", &distance, 1.0f, 20.0f);
-		ImGui::PopStyleVar();
+	// RADIAL_BLUR
+	ImGui::DragFloat2("blur_center", &radial_blur_data.blur_center.x, 0.01f);
+	ImGui::SliderFloat("blur_strength", &radial_blur_data.blur_strength, +0.0f, +1.0f);
+	ImGui::SliderFloat("blur_radius", &radial_blur_data.blur_radius, +0.0f, +1.0f);
+	ImGui::SliderFloat("blur_decay", &radial_blur_data.blur_decay, +0.0f, +1.0f);
 
-		ImGui::Text("Stage Rotation");
-		ImGui::SliderFloat("Rot X##obj3", &rotation_object3.x, -DirectX::XM_PI, DirectX::XM_PI);
-		ImGui::SliderFloat("Rot Y##obj3", &rotation_object3.y, -DirectX::XM_PI, DirectX::XM_PI);
-		ImGui::SliderFloat("Rot Z##obj3", &rotation_object3.z, -DirectX::XM_PI, DirectX::XM_PI);
-		ImGui::SliderFloat("Pos X##obj3", &translation_object3.x, -10.0f, 10.0f);
-		ImGui::SliderFloat("Pos Y##obj3", &translation_object3.y, -10.0f, 10.0f);
-		ImGui::SliderFloat("Pos Z##obj3", &translation_object3.z, -10.0f, 10.0f);
+	// BLOOM
+	ImGui::SliderFloat("bloom_extraction_threshold", &bloomer->bloom_extraction_threshold, +0.0f, +5.0f);
+	ImGui::SliderFloat("bloom_intensity", &bloomer->bloom_intensity, +0.0f, +5.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 10)); // 内側の余白を増やす
+	ImGui::SliderFloat("Camera Distance", &distance, 1.0f, 20.0f);
+	ImGui::PopStyleVar();
 
-		ImGui::Text("Camera Focus (Buttonで微調整)");
-		ImGui::SliderFloat("Focus X", &camera_focus.x, -10.0f, 10.0f);
-		ImGui::SliderFloat("Focus Y", &camera_focus.y, 0.0f, 10.0f);
-		ImGui::SliderFloat("Focus Z", &camera_focus.z, -10.0f, 10.0f);
+	ImGui::Text("Stage Rotation");
+	ImGui::SliderFloat("Rot X##obj3", &rotation_object3.x, -DirectX::XM_PI, DirectX::XM_PI);
+	ImGui::SliderFloat("Rot Y##obj3", &rotation_object3.y, -DirectX::XM_PI, DirectX::XM_PI);
+	ImGui::SliderFloat("Rot Z##obj3", &rotation_object3.z, -DirectX::XM_PI, DirectX::XM_PI);
+	ImGui::SliderFloat("Pos X##obj3", &translation_object3.x, -10.0f, 10.0f);
+	ImGui::SliderFloat("Pos Y##obj3", &translation_object3.y, -10.0f, 10.0f);
+	ImGui::SliderFloat("Pos Z##obj3", &translation_object3.z, -10.0f, 10.0f);
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Patty System]");
-		ImGui::Checkbox("Simulate", &patty_sim_enabled);
-		ImGui::SliderFloat("Gravity Y", &patty_gravity_y, -50.0f, 0.0f, "%.2f");
-		ImGui::SliderFloat("Ground Y", &patty_ground_y, -5.0f, 5.0f, "%.3f");
+	ImGui::Text("Camera Focus (Buttonで微調整)");
+	ImGui::SliderFloat("Focus X", &camera_focus.x, -10.0f, 10.0f);
+	ImGui::SliderFloat("Focus Y", &camera_focus.y, 0.0f, 10.0f);
+	ImGui::SliderFloat("Focus Z", &camera_focus.z, -10.0f, 10.0f);
 
-		ImGui::SliderFloat("Default Restitution", &patty_default_restitution, 0.0f, 1.0f);
-		ImGui::SliderFloat("Patty Spawn X", &patty_spawn_x, -10.0f, 10.0f, "%.3f");
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Patty System]");
+	ImGui::Checkbox("Simulate", &patty_sim_enabled);
+	ImGui::SliderFloat("Gravity Y", &patty_gravity_y, -50.0f, 0.0f, "%.2f");
+	ImGui::SliderFloat("Ground Y", &patty_ground_y, -5.0f, 5.0f, "%.3f");
 
-		if (ImGui::Button("Add 1 Patty"))
+	ImGui::SliderFloat("Default Restitution", &patty_default_restitution, 0.0f, 1.0f);
+	ImGui::SliderFloat("Patty Spawn X", &patty_spawn_x, -10.0f, 10.0f, "%.3f");
+
+	if (ImGui::Button("Add 1 Patty"))
+	{
+		add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear Patties")) { patties.clear(); }
+	ImGui::Text("Count: %d", (int)patties.size());
+
+	if (ImGui::Button("Add 1 Cheese"))
+	{
+		add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear Cheeses")) {
+		// 本当はBulletからも削除が必要だが簡易的にクリア
+		cheeses.clear();
+	}
+
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Pate Collider]");
+	ImGui::Checkbox("Enable Pate Collider", &pate_collider_enabled);
+	ImGui::SliderFloat("Pate plane Y", &pate_plane_y, -1.0f, 3.0f, "%.3f");
+	ImGui::SliderFloat("Pate half X (width/2)", &pate_half_extents.x, 0.05f, 2.0f, "%.3f");
+	ImGui::SliderFloat("Pate half Y (thickness/2)", &pate_half_extents.y, 0.01f, 1.0f, "%.3f");
+	ImGui::SliderFloat("Pate half Z (depth/2)", &pate_half_extents.z, 0.05f, 2.0f, "%.3f");
+	ImGui::SliderFloat("Pate restitution", &pate_restitution, 0.0f, 1.0f);
+	ImGui::Text("Pate pos = (%.2f, %.2f, %.2f)", pate_position.x, pate_position.y, pate_position.z);
+	//ImGui::SliderFloat("pate_follow_smooth", &pate_follow_smooth, 0.0f, 1.0f);
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Patty Z Controls]");
+	ImGui::Checkbox("Show Patty Collider", &patty_collider_visible);
+	// 生成時のZ
+	ImGui::DragFloat3("Default HalfExtents (hx,hy,hz)",
+		&patty_default_half_extents.x, 0.001f, 0.001f, 1.0f, "%.3f");
+
+	// 既存すべてを一括シフト（差分適用）
+	if (ImGui::SliderFloat("All Patties Z (offset)", &patties_z_offset, -10.0f, 10.0f, "%.3f"))
+	{
+		float dz = patties_z_offset - patties_z_offset_prev;
+		for (auto& P : patties) P.pos.z += dz;
+		patties_z_offset_prev = patties_z_offset;
+	}
+
+	// 1体だけ直接編集
+	if (!patties.empty())
+	{
+		ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
+		if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
 		{
-			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+			ImGui::SliderFloat("Selected Patty Z", &patties[patty_selected_index].pos.z, -10.0f, 10.0f, "%.3f");
 		}
-		ImGui::SameLine();
-		if (ImGui::Button("Clear Patties")) { patties.clear(); }
-		ImGui::Text("Count: %d", (int)patties.size());
+	}
 
-		if (ImGui::Button("Add 1 Cheese"))
+	if (!patties.empty())
+	{
+		ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
+
+		if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
 		{
-			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+			auto& S = patties[patty_selected_index];
+
+			// 入力 UI（ドラッグ操作で微調整しやすく）
+			ImGui::DragFloat("Selected Patty X", &S.pos.x, 0.01f, -10.0f, 10.0f, "%.3f");
+			ImGui::DragFloat("Selected Patty Y", &S.pos.y, 0.01f, -1.0f, 5.0f, "%.3f");
+			ImGui::DragFloat("Selected Patty Z", &S.pos.z, 0.01f, -10.0f, 10.0f, "%.3f");
+
+			// 視覚化用の現在値表示
+			ImGui::Text("Pos = (%.3f, %.3f, %.3f)", S.pos.x, S.pos.y, S.pos.z);
 		}
-		ImGui::SameLine();
-		if (ImGui::Button("Clear Cheeses")) {
-			// 本当はBulletからも削除が必要だが簡易的にクリア
-			cheeses.clear();
-		}
+	}
+
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Pate Control]");
+	ImGui::SliderFloat("Pate fixed X", &pate_fixed_x, -10.0f, 10.0f, "%.3f");
+	ImGui::SliderFloat("Pate fixed Z", &pate_fixed_z, -10.0f, 10.0f, "%.3f");
+
+	ImGui::TextUnformatted("Camera Orientation");
+	ImGui::SliderAngle("Yaw (rotateY)", &rotateY, -180.0f, 180.0f);
+	ImGui::SliderAngle("Pitch (rotateX)", &rotateX, -89.0f, 89.0f);
 
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Pate Collider]");
-		ImGui::Checkbox("Enable Pate Collider", &pate_collider_enabled);
-		ImGui::SliderFloat("Pate plane Y", &pate_plane_y, -1.0f, 3.0f, "%.3f");
-		ImGui::SliderFloat("Pate half X (width/2)", &pate_half_extents.x, 0.05f, 2.0f, "%.3f");
-		ImGui::SliderFloat("Pate half Y (thickness/2)", &pate_half_extents.y, 0.01f, 1.0f, "%.3f");
-		ImGui::SliderFloat("Pate half Z (depth/2)", &pate_half_extents.z, 0.05f, 2.0f, "%.3f");
-		ImGui::SliderFloat("Pate restitution", &pate_restitution, 0.0f, 1.0f);
-		ImGui::Text("Pate pos = (%.2f, %.2f, %.2f)", pate_position.x, pate_position.y, pate_position.z);
-		//ImGui::SliderFloat("pate_follow_smooth", &pate_follow_smooth, 0.0f, 1.0f);
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Patty Z Controls]");
-		ImGui::Checkbox("Show Patty Collider", &patty_collider_visible);
-		// 生成時のZ
-		ImGui::DragFloat3("Default HalfExtents (hx,hy,hz)",
-			&patty_default_half_extents.x, 0.001f, 0.001f, 1.0f, "%.3f");
+	ImGui::SliderFloat("kusi Y", &kusi.pos.y, -30.0f, 30.0f, "%.3f");
 
-		// 既存すべてを一括シフト（差分適用）
-		if (ImGui::SliderFloat("All Patties Z (offset)", &patties_z_offset, -10.0f, 10.0f, "%.3f"))
-		{
-			float dz = patties_z_offset - patties_z_offset_prev;
-			for (auto& P : patties) P.pos.z += dz;
-			patties_z_offset_prev = patties_z_offset;
-		}
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Buns]");
+	ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
 
-		// 1体だけ直接編集
-		if (!patties.empty())
-		{
-			ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
-			if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
-			{
-				ImGui::SliderFloat("Selected Patty Z", &patties[patty_selected_index].pos.z, -10.0f, 10.0f, "%.3f");
-			}
-		}
+	ImGui::Separator();
+	ImGui::TextUnformatted("[Buns]");
 
-		if (!patties.empty())
-		{
-			ImGui::SliderInt("Select Patty", &patty_selected_index, 0, (int)patties.size() - 1);
+	// 当たり可視化の切替（既存の可視化に連動）
+	ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
 
-			if (patty_selected_index >= 0 && patty_selected_index < (int)patties.size())
-			{
-				auto& S = patties[patty_selected_index];
+	ImGui::DragFloat3("Buns position (X,Y,Z)", &bun.pos.x, 0.01f, -20.0f, 20.0f, "%.3f");
 
-				// 入力 UI（ドラッグ操作で微調整しやすく）
-				ImGui::DragFloat("Selected Patty X", &S.pos.x, 0.01f, -10.0f, 10.0f, "%.3f");
-				ImGui::DragFloat("Selected Patty Y", &S.pos.y, 0.01f, -1.0f, 5.0f, "%.3f");
-				ImGui::DragFloat("Selected Patty Z", &S.pos.z, 0.01f, -10.0f, 10.0f, "%.3f");
+	if (ImGui::DragFloat3("Buns collider half extents", &bun.half_extents.x, 0.005f, 0.0f, 5.0f, "%.3f")) {
+		bun.half_extents.x = std::max(0.0f, bun.half_extents.x);
+		bun.half_extents.y = std::max(0.0f, bun.half_extents.y);
+		bun.half_extents.z = std::max(0.0f, bun.half_extents.z);
+	}
 
-				// 視覚化用の現在値表示
-				ImGui::Text("Pos = (%.3f, %.3f, %.3f)", S.pos.x, S.pos.y, S.pos.z);
-			}
-		}
+	// プリセット（ワンボタンで大きさをサクッと変更したい人類向け）
+	if (ImGui::Button("Small"))  bun.half_extents = { 0.06f, 0.03f, 0.06f };
+	ImGui::SameLine();
+	if (ImGui::Button("Medium")) bun.half_extents = { 0.10f, 0.04f, 0.10f };
+	ImGui::SameLine();
+	if (ImGui::Button("Large"))  bun.half_extents = { 0.14f, 0.06f, 0.14f };
+	ImGui::End();
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Pate Control]");
-		ImGui::SliderFloat("Pate fixed X", &pate_fixed_x, -10.0f, 10.0f, "%.3f");
-		ImGui::SliderFloat("Pate fixed Z", &pate_fixed_z, -10.0f, 10.0f, "%.3f");
+	ImGui::Begin("Hit Check");
+	for (int i = 0; i < patties.size(); ++i)
+	{
+		ImGui::Text("Patty %d : %s", i,
+			patties[i].isStuck ? "STUCK" :
+			patties[i].isColliding ? "HIT" : "FREE");
+	}
+	for (int i = 0; i < cheeses.size(); ++i)
+	{
+		ImGui::Text("Cheese %d : %s", i,
+			cheeses[i].isStuck ? "STUCK" :
+			cheeses[i].isColliding ? "HIT" : "FREE");
+	}
+	ImGui::End();
 
-		ImGui::TextUnformatted("Camera Orientation");
-		ImGui::SliderAngle("Yaw (rotateY)", &rotateY, -180.0f, 180.0f);
-		ImGui::SliderAngle("Pitch (rotateX)", &rotateX, -89.0f, 89.0f);
+	ImGui::Begin("Menu Debug");
 
-		
+	for (int i = 0; i < 10; ++i) {
+		ImGui::Text("kusi menu %d : %d", i, kusi_menu[i]);
+	}
 
-		ImGui::SliderFloat("kusi Y", &kusi.pos.y, -30.0f, 30.0f, "%.3f");
+	ImGui::End();
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Buns]");
-		ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
+	ImGui::Begin("Menu");
 
-		ImGui::Separator();
-		ImGui::TextUnformatted("[Buns]");
+	for (int i = 0; i < 10; ++i) {
+		ImGui::Text("menu %d : %d", i, karimenu[i]);
+	}
 
-		// 当たり可視化の切替（既存の可視化に連動）
-		ImGui::Checkbox("Show Bun Collider", &bun_collider_visible);
+	ImGui::End();
 
-		ImGui::DragFloat3("Buns position (X,Y,Z)", &bun.pos.x, 0.01f, -20.0f, 20.0f, "%.3f");
 
-		if (ImGui::DragFloat3("Buns collider half extents", &bun.half_extents.x, 0.005f, 0.0f, 5.0f, "%.3f")) {
-			bun.half_extents.x = std::max(0.0f, bun.half_extents.x);
-			bun.half_extents.y = std::max(0.0f, bun.half_extents.y);
-			bun.half_extents.z = std::max(0.0f, bun.half_extents.z);
-		}
-
-		// プリセット（ワンボタンで大きさをサクッと変更したい人類向け）
-		if (ImGui::Button("Small"))  bun.half_extents = { 0.06f, 0.03f, 0.06f };
-		ImGui::SameLine();
-		if (ImGui::Button("Medium")) bun.half_extents = { 0.10f, 0.04f, 0.10f };
-		ImGui::SameLine();
-		if (ImGui::Button("Large"))  bun.half_extents = { 0.14f, 0.06f, 0.14f };
-		ImGui::End();
-
-		ImGui::Begin("Hit Check");
-		for (int i = 0; i < patties.size(); ++i)
-		{
-			ImGui::Text("Patty %d : %s", i,
-				patties[i].isStuck ? "STUCK" :
-				patties[i].isColliding ? "HIT" : "FREE");
-		}
-		for (int i = 0; i < cheeses.size(); ++i)
-		{
-			ImGui::Text("Cheese %d : %s", i,
-				cheeses[i].isStuck ? "STUCK" :
-				cheeses[i].isColliding ? "HIT" : "FREE");
-		}
-		ImGui::End();
-
-		ImGui::Begin("Menu Debug");
-
-		for (int i = 0; i < 10; ++i) {
-			ImGui::Text("kusi menu %d : %d", i, kusi_menu[i]);
-		}
-
-		ImGui::End();
-
-		ImGui::Begin("Menu");
-
-		for (int i = 0; i < 10; ++i) {
-			ImGui::Text("menu %d : %d", i, karimenu[i]);
-		}
-
-		ImGui::End();
-
-		
 #endif
-		// ★ ここを追加：毎フレーム物理更新
-		//simulate_patties(elapsed_time);
-		
-		simulate_bun(elapsed_time);
-		CheckKusiCheeseCollision();
-		CheckKusiPattyCollision();
-	
+	// ★ ここを追加：毎フレーム物理更新
+	//simulate_patties(elapsed_time);
+
+	simulate_bun(elapsed_time);
+	CheckKusiCheeseCollision();
+	CheckKusiPattyCollision();
+	//CheckPateCollision();
+	StartTimer++;
 }
 void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 {
@@ -930,7 +968,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 		XMFLOAT4X4 world;
 		//XMStoreFloat4x4(&world, C * S * R * Rp * T);  // 好きな順で調整
-		XMStoreFloat4x4(&world, C* S* Rp* T);
+		XMStoreFloat4x4(&world, C * S * Rp * T);
 		skinned_meshes[2]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
 	}
 
@@ -961,8 +999,8 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
 			XMFLOAT4X4 world_box;
-		//	XMStoreFloat4x4(&world_box, C* Sbox* R* Rp* Tbox);
-			XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
+			//	XMStoreFloat4x4(&world_box, C* Sbox* R* Rp* Tbox);
+			XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 			// 半透明で描画（線ではなく中身あり。嫌ならアルファ上げ下げする）
 			skinned_meshes[6]->render(immediate_context.Get(), world_box,
@@ -993,7 +1031,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		flat_shading = prev_flat;
 	}
 
-	
+
 	//// === skinned_meshes[4]（アニメーションなし）===
 	///変更箇所
 
@@ -1139,13 +1177,13 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		// ここにある 'C' は、外側で定義されている「座標変換行列」を指すようになるのでエラーが消えます
 		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
 
-		XMStoreFloat4x4(&world, C* S* Rp* T);
+		XMStoreFloat4x4(&world, C * S * Rp * T);
 
 		// skinned_meshes[10] が Cheese
 		skinned_meshes[10]->render(immediate_context.Get(), world, material_color, nullptr, true);
 	}
 
-	
+
 	if (patty_collider_visible) // フラグはPattyと共用
 	{
 		using namespace DirectX;
@@ -1174,7 +1212,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMFLOAT4X4 world_box;
 			// これで 行列C * 行列Sbox... という正しい計算になります
 		//	XMStoreFloat4x4(&world_box, C * Sbox * R * Rp * Tbox);
-			XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
+			XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 			// 黄色っぽく表示
 			skinned_meshes[6]->render(immediate_context.Get(), world_box, { 1.0f, 1.0f, 0.0f, 0.35f }, nullptr, true);
@@ -1192,7 +1230,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 		XMFLOAT4X4 world;
 		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
-		XMStoreFloat4x4(&world, C* S* Rp* T);
+		XMStoreFloat4x4(&world, C * S * Rp * T);
 		// skinned_meshes[9] が Buns_under
 		skinned_meshes[9]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
 	}
@@ -1220,12 +1258,12 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 		//XMStoreFloat4x4(&world_box, C * Sbox * R * Tbox); // 回転Rpは初期0なのでRのみ考慮でもOK
 
-		XMStoreFloat4x4(&world_box, C* Sbox* Rp* Tbox);
+		XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 		// 青っぽく表示
 		skinned_meshes[6]->render(immediate_context.Get(), world_box, { 0.2f, 0.2f, 1.0f, 0.35f }, nullptr, true);
 	}
-	
+
 
 	// BOUNDING_BOX
 	{
@@ -1280,7 +1318,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 			XMStoreFloat4x4(&transform, scaleMat * transMat * worldMat);
 		}
-	}
+		}
 	{
 		using namespace DirectX;
 
@@ -1350,7 +1388,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	UINT sync_interval{ 0 };
 	swap_chain->Present(sync_interval, 0);
-}
+	}
 
 const int CheckMenu(const int* a, const int* b, int size)
 {
@@ -1389,6 +1427,17 @@ void framework::add_patty(const DirectX::XMFLOAT3& p,
 	info.m_friction = 0.5f;
 
 	btRigidBody* body = new btRigidBody(info);
+
+
+	if (isSpawningPhase)
+	{
+		// LinearFactor: 1=動く, 0=動かない (X, Y, Z) -> Yだけ動かす
+		body->setLinearFactor(btVector3(0, 1, 0));
+
+		// AngularFactor: 1=回転する, 0=回転しない -> 全てロック
+		body->setAngularFactor(btVector3(0, 0, 0));
+	}
+
 	m_btWorld->addRigidBody(body);
 
 	obj.body = body;
@@ -1465,7 +1514,7 @@ void framework::simulate_bun(float dt)
 	bun.pos.y += bun.vel.y * dt;
 	bun.pos.z += bun.vel.z * dt;
 
-	
+
 
 	if (pate_collider_enabled)
 	{
@@ -1565,11 +1614,11 @@ void framework::simulate_patties(float dt)
 		float minY = P.pos.y - P.half_extents.y;
 		if (minY < patty_ground_y)
 		{
-			
+
 
 			float minY = P.pos.y - P.half_extents.y;
 
-			
+
 		}
 	}
 
@@ -1637,39 +1686,46 @@ void framework::CheckKusiPattyCollision()
 }
 
 void framework::add_cheese(const DirectX::XMFLOAT3& p,
-    const DirectX::XMFLOAT3& half_extents,
-    float mass,
-    float restitution)
+	const DirectX::XMFLOAT3& half_extents,
+	float mass,
+	float restitution)
 {
-    Cheese obj{};
-    obj.pos = p;
-    obj.vel = { 0.0f, 0.0f, 0.0f };
-    obj.half_extents = half_extents;
-    obj.mass = mass;
-    obj.restitution = restitution;
+	Cheese obj{};
+	obj.pos = p;
+	obj.vel = { 0.0f, 0.0f, 0.0f };
+	obj.half_extents = half_extents;
+	obj.mass = mass;
+	obj.restitution = restitution;
 
-    // Bullet rigid body 作成
-    btTransform tr;
-    tr.setIdentity();
-    tr.setOrigin(btVector3(p.x, p.y, p.z));
+	// Bullet rigid body 作成
+	btTransform tr;
+	tr.setIdentity();
+	tr.setOrigin(btVector3(p.x, p.y, p.z));
 
-    btVector3 inertia(0, 0, 0);
-    if (mass > 0.0f)
-        m_cheeseShape->calculateLocalInertia(mass, inertia);
+	btVector3 inertia(0, 0, 0);
+	if (mass > 0.0f)
+		m_cheeseShape->calculateLocalInertia(mass, inertia);
 
-    btDefaultMotionState* motion = new btDefaultMotionState(tr);
-    btRigidBody::btRigidBodyConstructionInfo info(mass, motion, m_cheeseShape, inertia);
-    info.m_restitution = restitution;
+	btDefaultMotionState* motion = new btDefaultMotionState(tr);
+	btRigidBody::btRigidBodyConstructionInfo info(mass, motion, m_cheeseShape, inertia);
+	info.m_restitution = restitution;
 
 	info.m_friction = 0.5f;
 
-    btRigidBody* body = new btRigidBody(info);
-    m_btWorld->addRigidBody(body);
+	btRigidBody* body = new btRigidBody(info);
 
-    obj.body = body;
+	if (isSpawningPhase)
+	{
+		body->setLinearFactor(btVector3(0, 1, 0));
+		body->setAngularFactor(btVector3(0, 0, 0));
+	}
 
-    cheeses.push_back(obj);
-    m_cheeseBodies.push_back(body);
+	m_btWorld->addRigidBody(body);
+
+	obj.body = body;
+
+	cheeses.push_back(obj);
+	m_cheeseBodies.push_back(body);
 }
 
 
@@ -1688,12 +1744,12 @@ void framework::CheckKusiCheeseCollision()
 		if (hit)
 		{
 			cheese.isStuck = true;
-		
-		
+
+
 			if (cheese.body) {
 				cheese.body->setLinearVelocity(btVector3(0, 0, 0));
 				cheese.body->setAngularVelocity(btVector3(0, 0, 0));
-				
+
 				cheese.body->setGravity(btVector3(0, 0, 0));
 			}
 			kusi_menu[menu_count] = 2;
@@ -1757,8 +1813,8 @@ void framework::initBulletWorld()
 		m_btWorld->addRigidBody(bunUnder.body);
 	}
 
-	
-	
+
+
 	{
 		// パテの形状を作成 (pate_half_extentsを使用)
 		m_pateShape = new btBoxShape(btVector3(pate_half_extents.x, pate_half_extents.y, pate_half_extents.z));
@@ -1784,6 +1840,138 @@ void framework::initBulletWorld()
 
 		m_btWorld->addRigidBody(m_pateBody);
 	}
+}
+
+
+
+// 最初だけ生成してシャッフル
+void framework::prepareSpawnList()
+{
+	spawnList.clear();
+	spawnList.reserve(SPAWN_MAX * 2);
+
+	// 0 を 5回、1 を 5回登録
+	for (int i = 0; i < SPAWN_MAX; i++) spawnList.push_back(0);
+	for (int i = 0; i < SPAWN_MAX; i++) spawnList.push_back(1);
+
+	// 静的乱数ジェネレータを使う
+	static std::mt19937 gen((unsigned int)std::time(nullptr));
+
+	std::shuffle(spawnList.begin(), spawnList.end(), gen);
+
+	spawnIndex = 0;
+}
+
+void framework::Spwan(float dt)
+{
+	if (!allSpawn) return;
+
+	coolTimer += dt;
+
+	while (coolTimer >= interval && spawnIndex < spawnList.size())
+	{
+		coolTimer -= interval;
+
+		int type = spawnList[spawnIndex++];
+
+		if (type == 0)
+		{
+			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+		}
+		else
+		{
+			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+		}
+	}
+
+	// 全出現したら終了
+	if (spawnIndex >= spawnList.size())
+	{
+		allSpawn = false;
+
+		// ★ 追加: スポーン完了時にロックを解除する関数を呼ぶ
+		// （少し待ってから解除したい場合はタイマーを使うなど調整してください）
+		EnablePhysicsForGameplay();
+	}
+}
+
+void framework::EnablePhysicsForGameplay()
+{
+	if (!isSpawningPhase) return; // 既に解除済みなら何もしない
+	isSpawningPhase = false;
+
+	
+	// 共通設定用のラムダ式（設定を一括で行う）
+	auto setupBodyForGame = [](btRigidBody* body)
+		{
+			if (!body) return;
+
+			// ロック解除
+			body->setLinearFactor(btVector3(1, 1, 1));
+			body->setAngularFactor(btVector3(1, 1, 1));
+
+			//  修正: 回転減衰（第2引数）を上げる
+			
+			// これで「置いているだけなら倒れない粘り強さ」が出ます
+			body->setDamping(0.05f, 1.8f);
+
+			// 摩擦は高いままでOK
+			body->setFriction(0.5f);
+
+			body->activate(true);
+		};
+
+	// 全ての具材に適用
+	for (auto& p : patties) setupBodyForGame(p.body);
+	for (auto& c : cheeses) setupBodyForGame(c.body);
+
+	
+
+	// 下のバンズ（土台）も摩擦だけは合わせておく（動かない設定は維持される）
+	if (bunUnder.body)
+	{
+		bunUnder.body->setFriction(1.0f);
+	}
+}
+void framework::CheckPateCollision()
+{
+	// パテが無効なら何もしない
+	if (!m_pateBody) return;
+
+	using namespace DirectX;
+
+	// --- Patty との判定 ---
+	for (auto& p : patties)
+	{
+		// 既にロック解除済み（自由落下モード）ならスキップ
+		// (LinearFactorのX成分が0以外なら解除済みとみなす判定)
+		if (p.body->getLinearFactor().x() != 0.0f) continue;
+
+		// 当たり判定 (AABB)
+		if (IsIntersectAABB(pate_position, pate_half_extents, p.pos, p.half_extents))
+		{
+			//  ロック解除: 全方向に移動・回転できるようにする
+			p.body->setLinearFactor(btVector3(1, 1, 1));
+			p.body->setAngularFactor(btVector3(1, 1, 1));
+			p.body->activate(true);
+		}
+	}
+
+	// --- Cheese との判定 ---
+	for (auto& c : cheeses)
+	{
+		if (c.body->getLinearFactor().x() != 0.0f) continue;
+
+		if (IsIntersectAABB(pate_position, pate_half_extents, c.pos, c.half_extents))
+		{
+			// ★ ロック解除
+			c.body->setLinearFactor(btVector3(1, 1, 1));
+			c.body->setAngularFactor(btVector3(1, 1, 1));
+			c.body->activate(true);
+		}
+	}
+
+
 }
 
 bool framework::uninitialize()
