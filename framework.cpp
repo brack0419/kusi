@@ -10,7 +10,9 @@
 #define BT_NO_SIMD_OPERATOR_OVERLOADS
 #include <bullet/btBulletDynamicsCommon.h>
 
-#include<random>
+#include <vector>
+#include <random>
+
 
 int menu_count = 0;
 
@@ -355,42 +357,17 @@ bool framework::initialize()
 
 	menu_count = 0;
 
-	prepareSpawnList();
+	//prepareSpawnList();
 
+	generatePattern();
 
 	return true;
 }
 
 void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 {
-	//if (allSpawn)
-	//{
-	//	coolTimer += elapsed_time;
 
-	//	// 0.1 秒経過ごとに発動
-	//	const float interval = 0.1f;
-
-	//	while (coolTimer >= interval && callCount >= SPAWN_MAX)
-	//	{
-	//		srand((unsigned int)time(nullptr));
-	//		coolTimer -= interval;  // 残り時間を繰り越し
-	//		switch (rand() % 2 == 0)
-	//		{
-	//		case 0:
-	//			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
-	//			callCount++;
-	//			break;
-
-	//		case 1:
-	//			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
-	//			callCount++;
-	//			break;
-	//		}
-	//	}
-	//	allSpawn = false;
-	//}
-
-	Spwan(elapsed_time);
+	Spawn(elapsed_time);
 
 
 	if (kusi.pos.y + 0.028 <= patty_ground_y) // +の数値はkusiの位置調整のため
@@ -419,6 +396,13 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 	if (now_down && !prev_down) { // 押した瞬間だけ反応
 		kusi.move = !kusi.move;               // トグル
 		hitStop = !hitStop;
+		if (kusi.move)
+		{
+			bun.exists = true;                 // 描画・物理演算を有効化
+			bun.pos = { -0.3f, 3.0f, -10.0f }; // 上空(Y=4.0)に移動。位置は串やパティのX,Zに合わせて調整してください
+			bun.vel = { 0.0f, 0.0f, 0.0f };    // 落下速度をリセット
+		}
+		//spawn_bun_up();
 	}
 
 	prev_down = now_down; // 状態保存
@@ -430,10 +414,10 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	if (!bun_spawned_initial)
 	{
-		bun.exists = true;
+		bun.exists = false;
 		bun.pos = { -0.3f, 1.3f, -10.0f }; // だいたいPattyと同じ奥行き
 		bun.vel = { 0.0f, 0.0f, 0.0f };
-		bun.half_extents = { 0.020f, 0.011f, 0.020f }; // 好みで微調整可
+
 		bun.mass = 1.0f;
 		bun.restitution = 0.0f;
 		bun_spawned_initial = true;
@@ -502,24 +486,6 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 			btQuaternion q = tr.getRotation();
 			P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
 
-
-			//if (StartTimer >= 2000)
-			//{
-			//	btVector3 vel = P.body->getLinearVelocity();
-			//	vel.setX(0.0f);  // X方向を停止
-			//	vel.setZ(0.0f);  // Z方向を停止
-			//	P.body->setLinearVelocity(vel);
-			//}
-			//////////////////////////////バグを出す原因かも
-			//resolve_pate_collision(P);
-
-			////// ★ 修正済みの位置
-			//tr.setOrigin(btVector3(P.pos.x, P.pos.y, P.pos.z));
-			//P.body->setWorldTransform(tr);
-			//P.body->getMotionState()->setWorldTransform(tr);
-			////P.body->setLinearVelocity(btVector3(P.vel.x, P.vel.y, P.vel.z));
-
-			/////////////////////////////////////
 		}
 
 		for (auto& C : cheeses)
@@ -531,7 +497,6 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 			// ここでは物理演算の結果を取得するだけにする（Stuck時は物理無効化などを想定）
 			if (C.isStuck) {
 				// 串と一緒に動かすならここに追従処理
-				// C.pos.y = kusi.pos.y + offset... 等
 				continue;
 			}
 
@@ -542,17 +507,8 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 			btQuaternion q = tr.getRotation();
 			C.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
 
-			//if (StartTimer >= 2000)
-			//{
-			//	btVector3 vel = C.body->getLinearVelocity();
-			//	vel.setX(0.0f);  // X方向を停止
-			//	vel.setZ(0.0f);  // Z方向を停止
-			//	C.body->setLinearVelocity(vel);
-			//}
 		}
 	}
-
-
 
 #ifdef USE_IMGUI
 	ImGui_ImplDX11_NewFrame();
@@ -573,7 +529,8 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 
 		ImGui::Text("gameEnd = 2 : Game Over");
 
-		ImGui::Text("StartTimer: %.2f", StartTimer);
+		ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
+
 
 	ImGui::Checkbox("flat_shading", &flat_shading);
 	ImGui::Checkbox("Enable Dynamic Shader", &enable_dynamic_shader);
@@ -653,7 +610,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 	ImGui::SliderFloat("Pate half Z (depth/2)", &pate_half_extents.z, 0.05f, 2.0f, "%.3f");
 	ImGui::SliderFloat("Pate restitution", &pate_restitution, 0.0f, 1.0f);
 	ImGui::Text("Pate pos = (%.2f, %.2f, %.2f)", pate_position.x, pate_position.y, pate_position.z);
-	//ImGui::SliderFloat("pate_follow_smooth", &pate_follow_smooth, 0.0f, 1.0f);
+
 
 	ImGui::Separator();
 	ImGui::TextUnformatted("[Patty Z Controls]");
@@ -768,16 +725,26 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	ImGui::End();
 
+	ImGui::Begin("Spawn List");
+
+	// 配列を横並びで表示
+	ImGui::Text("Spawn Pattern:");
+	for (int i = 0; i < result.size(); i++)
+	{
+		ImGui::SameLine();
+		ImGui::Text("%d", result[i]);
+	}
+
+	ImGui::End();
+
 
 #endif
-	// ★ ここを追加：毎フレーム物理更新
-	//simulate_patties(elapsed_time);
+
 
 	simulate_bun(elapsed_time);
 	CheckKusiCheeseCollision();
 	CheckKusiPattyCollision();
-	//CheckPateCollision();
-	StartTimer++;
+
 }
 void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 {
@@ -841,6 +808,9 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		const float vx = static_cast<float>(mouse_client_pos.x);
 		const float vy = static_cast<float>(mouse_client_pos.y);
 
+		
+		
+
 		using namespace DirectX;
 		XMVECTOR nearPt = XMVector3Unproject(
 			XMVectorSet(vx, vy, 0.0f, 1.0f),
@@ -866,7 +836,11 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 			// X は固定、Y/Z を目標値に
 			pate_target.x = planeX;
-			pate_target.y = hit3.y;
+			if (!(GetAsyncKeyState(VK_RBUTTON) & 0x8000))
+			{
+				pate_target.y = hit3.y;
+			}
+			
 			pate_target.z = hit3.z;
 		}
 
@@ -1131,6 +1105,8 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		// FBXはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
 		XMMATRIX T = XMMatrixTranslation(bun.pos.x, bun.pos.y, bun.pos.z);
 		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f); // 必要なら調整
+
+
 		XMFLOAT4X4 world_bun;
 		XMStoreFloat4x4(&world_bun, C * S * R * T);
 		skinned_meshes[8]->render(immediate_context.Get(), world_bun, material_color, nullptr, flat_shading);
@@ -1174,12 +1150,9 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
 		XMFLOAT4X4 world;
-		// ここにある 'C' は、外側で定義されている「座標変換行列」を指すようになるのでエラーが消えます
-		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
 
 		XMStoreFloat4x4(&world, C * S * Rp * T);
 
-		// skinned_meshes[10] が Cheese
 		skinned_meshes[10]->render(immediate_context.Get(), world, material_color, nullptr, true);
 	}
 
@@ -1210,8 +1183,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
 			XMFLOAT4X4 world_box;
-			// これで 行列C * 行列Sbox... という正しい計算になります
-		//	XMStoreFloat4x4(&world_box, C * Sbox * R * Rp * Tbox);
+;
 			XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 			// 黄色っぽく表示
@@ -1228,8 +1200,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		XMVECTOR q = XMLoadFloat4(&bunUnder.rotQuat);
 		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
-		XMFLOAT4X4 world;
-		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
+		XMFLOAT4X4 world;;
 		XMStoreFloat4x4(&world, C * S * Rp * T);
 		// skinned_meshes[9] が Buns_under
 		skinned_meshes[9]->render(immediate_context.Get(), world, material_color, nullptr, flat_shading);
@@ -1427,6 +1398,7 @@ void framework::add_patty(const DirectX::XMFLOAT3& p,
 	info.m_friction = 0.5f;
 
 	btRigidBody* body = new btRigidBody(info);
+	//body->setDamping(0.2f, 0.2f);
 
 
 	if (isSpawningPhase)
@@ -1590,6 +1562,32 @@ void framework::simulate_bun(float dt)
 		}
 	}
 
+	for (const auto& C : cheeses)
+	{
+		const float dx = bun.pos.x - C.pos.x;
+		const float px = (bun.half_extents.x + C.half_extents.x) - fabsf(dx);
+		if (px <= 0) continue;
+
+		const float dy = bun.pos.y - C.pos.y;
+		const float py = (bun.half_extents.y + C.half_extents.y) - fabsf(dy);
+		if (py <= 0) continue;
+
+		const float dz = bun.pos.z - C.pos.z;
+		const float pz = (bun.half_extents.z + C.half_extents.z) - fabsf(dz);
+		if (pz <= 0) continue;
+
+		// 最小貫通軸で押し戻し（チーズの反発係数を考慮）
+		const float e = std::max(bun.restitution, C.restitution);
+
+		// 主に上下方向(Y軸)の衝突を解決して積み重なるようにする
+		if (py <= px && py <= pz)
+		{
+			const float s = (dy >= 0.0f) ? 1.0f : -1.0f;
+			bun.pos.y += s * py;
+			if (s * bun.vel.y < 0.0f) bun.vel.y = -bun.vel.y * e;
+		}
+	}
+
 	// 数値発散の簡易ブレーキ（必要なら）
 	bun.vel.x *= 0.999f;
 	bun.vel.z *= 0.999f;
@@ -1713,6 +1711,7 @@ void framework::add_cheese(const DirectX::XMFLOAT3& p,
 	info.m_friction = 0.5f;
 
 	btRigidBody* body = new btRigidBody(info);
+	//body->setDamping(0.2f, 0.2f);
 
 	if (isSpawningPhase)
 	{
@@ -1783,6 +1782,8 @@ void framework::initBulletWorld()
 		cheese_default_half_extents.y,
 		cheese_default_half_extents.z));
 
+
+
 	// ★ Buns_under (静的剛体) の作成
 	{
 		// サイズ設定 (見た目に合わせて調整)
@@ -1813,8 +1814,6 @@ void framework::initBulletWorld()
 		m_btWorld->addRigidBody(bunUnder.body);
 	}
 
-
-
 	{
 		// パテの形状を作成 (pate_half_extentsを使用)
 		m_pateShape = new btBoxShape(btVector3(pate_half_extents.x, pate_half_extents.y, pate_half_extents.z));
@@ -1842,56 +1841,72 @@ void framework::initBulletWorld()
 	}
 }
 
-
-
-// 最初だけ生成してシャッフル
-void framework::prepareSpawnList()
+std::vector<int> framework::generatePattern()
 {
-	spawnList.clear();
-	spawnList.reserve(SPAWN_MAX * 2);
+	result.reserve(SPAWN_MAX);
 
-	// 0 を 5回、1 を 5回登録
-	for (int i = 0; i < SPAWN_MAX; i++) spawnList.push_back(0);
-	for (int i = 0; i < SPAWN_MAX; i++) spawnList.push_back(1);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<int> dist(1, 2); // 1～2
 
-	// 静的乱数ジェネレータを使う
-	static std::mt19937 gen((unsigned int)std::time(nullptr));
+	int count = 0;
 
-	std::shuffle(spawnList.begin(), spawnList.end(), gen);
+	while (count < SPAWN_MAX)
+	{
+		// --- 0 を追加 ---
+		int remaining = SPAWN_MAX - count;
+		int zeroTimes = std::min(dist(gen), remaining); // 残りを超えないように
+		for (int i = 0; i < zeroTimes; ++i)
+		{
+			result.push_back(0);
+			count++;
+		}
 
-	spawnIndex = 0;
+		if (count >= SPAWN_MAX) break;
+
+		// --- 1 を追加 ---
+		remaining = SPAWN_MAX - count;
+		int oneTimes = std::min(dist(gen), remaining); // 残りを超えないように
+		for (int i = 0; i < oneTimes; ++i)
+		{
+			result.push_back(1);
+			count++;
+		}
+	}
+
+	return result;
 }
 
-void framework::Spwan(float dt)
+void framework::Spawn(float dt)
 {
 	if (!allSpawn) return;
 
 	coolTimer += dt;
 
-	while (coolTimer >= interval && spawnIndex < spawnList.size())
+	// 1回だけスポーン
+	if (coolTimer >= interval && spawnIndex < result.size())
 	{
 		coolTimer -= interval;
 
-		int type = spawnList[spawnIndex++];
+		int type = result[spawnIndex++];
 
 		if (type == 0)
 		{
-			add_patty({ patty_spawn_x, 0.5f, patty_spawn_z }, patty_default_half_extents, patty_default_mass, patty_default_restitution);
+			add_patty({ patty_spawn_x, SPAWN_HIGH, patty_spawn_z },
+				patty_default_half_extents, patty_default_mass, patty_default_restitution);
 		}
 		else
 		{
-			add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+			add_cheese({ patty_spawn_x, SPAWN_HIGH, patty_spawn_z },
+				cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
 		}
-	}
 
-	// 全出現したら終了
-	if (spawnIndex >= spawnList.size())
-	{
-		allSpawn = false;
-
-		// ★ 追加: スポーン完了時にロックを解除する関数を呼ぶ
-		// （少し待ってから解除したい場合はタイマーを使うなど調整してください）
-		EnablePhysicsForGameplay();
+		// 全て出現完了
+		if (spawnIndex >= result.size())
+		{
+			allSpawn = false;
+			EnablePhysicsForGameplay();
+		}
 	}
 }
 
@@ -1982,3 +1997,4 @@ bool framework::uninitialize()
 framework::~framework()
 {
 }
+
