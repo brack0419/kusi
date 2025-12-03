@@ -56,19 +56,18 @@ CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
 
 #define MENU_MAX 10
-#define SPAWN_MAX 5
+#define SPAWN_MAX 10
+#define SPAWN_HIGH 0.6f
 
 class framework
 {
 public:
 	
-	float StartTimer = 0;
-	
-	std::vector<int> spawnList;  // 0 = patty, 1 = cheese
+	std::vector<int> result;
 
 	int spawnIndex = 0;
 	
-	const float interval = 0.3f;
+	const float interval = 1.00f;
 	
 	bool allSpawn = true;
 
@@ -215,8 +214,9 @@ public:
 	void simulate_patties(float dt);
 	void resolve_pair(int ia, int ib);
 
-	void prepareSpawnList();
-	void Spwan(float dt);
+	std::vector<int> generatePattern();
+	//void prepareSpawnList();
+	void Spawn(float dt);
 	//////////////////////////////////
 
 	struct Cheese {
@@ -330,15 +330,23 @@ public:
 	struct Bun {
 		DirectX::XMFLOAT3 pos{ -0.3f, 1.3f, 0.0f };
 		DirectX::XMFLOAT3 vel{ 0.0f, 0.0f, 0.0f };
-		DirectX::XMFLOAT3 half_extents{ 0.020f, 0.011f, 0.020f };
+		DirectX::XMFLOAT3 half_extents{ 0.055f, 0.008f, 0.058f };
 		float mass{ 1.0f };
 		float restitution{ 0.0f };
 		bool exists{ false };
+
+		// ★ 追加: Bullet用
+		btRigidBody* body = nullptr;
+		DirectX::XMFLOAT4 rotQuat{ 0, 0, 0, 1 };
 	};
 	Bun bun;
+	btBoxShape* m_bunUpShape = nullptr;
 	bool bun_spawned_initial = false;
 	bool bun_collider_visible = true;
 	DirectX::XMFLOAT4 bun_collider_color{ 0.2f, 1.0f, 0.2f, 0.35f };
+	/*void spawn_bun_up();
+
+	void CheckBunCollision();*/
 
 	// 1体だけの簡易シミュレーション（重力＆床Y）
 	void simulate_bun(float dt);
@@ -355,7 +363,7 @@ public:
 		//串
 	struct Kusi
 	{
-		DirectX::XMFLOAT3 pos{ -0.3f, 1.0f, -10.0f };
+		DirectX::XMFLOAT3 pos{ -0.3f, 1.5f, -10.0f };
 		DirectX::XMFLOAT3 half_extents{ 0.01f, 0.01f, 0.01f };
 
 		bool kusi_End = false;
