@@ -335,6 +335,12 @@ bool framework::initialize()
 
 	skinned_meshes[10] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\Cheese.fbx");
 
+	bgmSource = Audio::Instance().LoadAudioSource(".\\resources\\test.wav");
+	if (bgmSource)
+	{
+		bgmSource->Play(true);
+		//TitleSource->Play(false);
+	}
 	// テクスチャ表示用シェーダー
 	create_ps_from_cso(device.Get(), "dynamic_texture_ps.cso", effect_shaders[0].GetAddressOf());
 
@@ -1991,10 +1997,18 @@ void framework::CheckPateCollision()
 
 bool framework::uninitialize()
 {
+	// BGM停止・破棄
+	if (bgmSource)
+	{
+		bgmSource->Stop();
+		delete bgmSource;
+		bgmSource = nullptr;
+	}
+
 	return true;
 }
 
 framework::~framework()
 {
-}
 
+}
