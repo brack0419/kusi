@@ -52,13 +52,15 @@ extern ImWchar glyphRangesJapanese[];
 #include "Audio.h"
 #include "AudioSource.h"  
 
-//CONST LONG SCREEN_WIDTH{ 1920 };
-//CONST LONG SCREEN_HEIGHT{ 1080 };
-
+#if 1
+CONST LONG SCREEN_WIDTH{ 1920 };
+CONST LONG SCREEN_HEIGHT{ 1080 };
+CONST BOOL FULLSCREEN{ TRUE };
+#else
 CONST LONG SCREEN_WIDTH{ 1280 };
 CONST LONG SCREEN_HEIGHT{ 720 };
-
-CONST BOOL FULLSCREEN{ FALSE };
+CONST BOOL FULLSCREEN{ TRUE };
+#endif
 CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
 
@@ -66,18 +68,21 @@ CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 #define SPAWN_MAX 10
 #define SPAWN_HIGH 0.6f
 
+#define KUSI_SPEED 0.001;
+
 class framework
 {
 public:
+	float StartTime = 0;
 
 	AudioSource* bgmSource;
-	
+
 	std::vector<int> result;
 
 	int spawnIndex = 0;
-	
+
 	const float interval = 1.00f;
-	
+
 	bool allSpawn = true;
 
 	int callCount = 0;
@@ -88,12 +93,17 @@ public:
 	//  ゲームの状態管理
 	bool isSpawningPhase = true; // true: 積み上げ中, false: プレイ中
 
+	float spawnJitter = 0.05f;
+
 	void EnablePhysicsForGameplay();
 
 	void CheckPateCollision();
 
-	int karimenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
+	void Reset();
 
+	int karimenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
+	bool isWaitingForPhysics = false;
+	float physicsWaitTimer = 0.0f;
 
 	bool hitStop = false;
 
@@ -137,12 +147,12 @@ public:
 	// ★ 追加: パテ用の形状とボディ
 	btBoxShape* m_pateShape = nullptr;
 	btRigidBody* m_pateBody = nullptr;
-	
+
 	// Patty 用 rigid body のリスト（Patty とインデックス対応）
 	std::vector<btRigidBody*>           m_pattyBodies;
 
 	// 地面
-	
+
 
 
 	struct scene_constants
@@ -249,7 +259,7 @@ public:
 	std::vector<btRigidBody*> m_cheeseBodies;
 
 	// パラメータ
-	DirectX::XMFLOAT3 cheese_default_half_extents{ 0.035f, 0.009f, 0.048f }; 
+	DirectX::XMFLOAT3 cheese_default_half_extents{ 0.035f, 0.004f, 0.048f };
 	float cheese_default_mass = 0.5f;
 	float cheese_default_restitution = 0.0f;
 
@@ -274,7 +284,7 @@ public:
 	btBoxShape* m_bunUnderShape = nullptr;
 
 
-	
+
 	Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffers[8];
 
 	DirectX::XMFLOAT3 camera_position{ -8.8f, 7.5f, 0.0f };
@@ -390,7 +400,7 @@ public:
 	bool patty_collider_visible = true;
 	DirectX::XMFLOAT4 patty_collider_color{ 1.0f, 0.2f, 0.2f, 0.35f };
 	// コライダー中心は pate_position（既存）を使用
-	DirectX::XMFLOAT3 pate_half_extents{ 0.01f, 0.002f, 0.005f }; // X=幅/2, Y=厚み/2, Z=奥行/2
+	DirectX::XMFLOAT3 pate_half_extents{ 0.08f, 0.004f, 0.01f }; // X=幅/2, Y=厚み/2, Z=奥行/2
 	float pate_restitution = 0.0f; // 反発
 	float pate_plane_y = 0.373f; // マウス追従に使う平面の高さ（pate_position.y に反映）
 	//////////////////////////
@@ -399,7 +409,7 @@ public:
 	float patties_z_offset_prev = 0.0f; // 前フレーム値（差分適用に利用）
 	int patty_selected_index = -1; // 選択中（-1: なし）
 	/////////////////////////////
-	
+
 
 
 	void CheckKusiPattyCollision();
@@ -550,3 +560,4 @@ private:
 		}
 	}
 };
+
