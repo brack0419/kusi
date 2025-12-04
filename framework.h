@@ -49,9 +49,16 @@ extern ImWchar glyphRangesJapanese[];
 // BLOOM
 #include "bloom.h"
 
-CONST LONG SCREEN_WIDTH{ 1920 };
-CONST LONG SCREEN_HEIGHT{ 1080 };
-CONST BOOL FULLSCREEN{ TRUE };
+#include "Audio.h"
+#include "AudioSource.h"  
+
+//CONST LONG SCREEN_WIDTH{ 1920 };
+//CONST LONG SCREEN_HEIGHT{ 1080 };
+
+CONST LONG SCREEN_WIDTH{ 1280 };
+CONST LONG SCREEN_HEIGHT{ 720 };
+
+CONST BOOL FULLSCREEN{ FALSE };
 CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
 
@@ -62,6 +69,8 @@ CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 class framework
 {
 public:
+
+	AudioSource* bgmSource;
 	
 	std::vector<int> result;
 
@@ -541,4 +550,3 @@ private:
 		}
 	}
 };
-
