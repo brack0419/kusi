@@ -372,11 +372,18 @@ bool framework::initialize()
 
 void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 {
+	StartTime += elapsed_time;
+
+	//if(GetAsyncKeyState(VK_LSHIFT) & 0x8000)
+	if (StartTime <= 5.0f)
+	{
+		POINT p = { 1500, 540 };
+		SetCursorPos(p.x, p.y);
+	}
 
 	Spawn(elapsed_time);
 
-
-	if (kusi.pos.y + 0.028 <= patty_ground_y) // +の数値はkusiの位置調整のため
+	if (kusi.pos.y + 0.05 <= patty_ground_y) // +の数値はkusiの位置調整のため
 	{
 		kusi.kusi_End = true;
 		kusi.move = false;
@@ -386,6 +393,14 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 	{
 		gameEnd = CheckMenu(kusi_menu, karimenu, MENU_MAX);
 	}
+
+	static bool prev_R = false;
+	bool now_R = (GetAsyncKeyState('R') & 0x8000);
+	if (now_R && !prev_R)
+	{
+		Reset();
+	}
+	prev_R = now_R;
 
 	camera_focus.y += wheel * 0.0005f;
 
@@ -405,7 +420,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 		if (kusi.move)
 		{
 			bun.exists = true;                 // 描画・物理演算を有効化
-			bun.pos = { -0.3f, 3.0f, -10.0f }; // 上空(Y=4.0)に移動。位置は串やパティのX,Zに合わせて調整してください
+			bun.pos = { -0.3f, 3.0f, -10.0f }; // 上空(Y=4.0)に移動。
 			bun.vel = { 0.0f, 0.0f, 0.0f };    // 落下速度をリセット
 		}
 		//spawn_bun_up();
@@ -415,7 +430,7 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	if (kusi.move)
 	{
-		kusi.pos.y -= 0.0005;
+		kusi.pos.y -= KUSI_SPEED;
 	}
 
 	if (!bun_spawned_initial)
@@ -533,9 +548,9 @@ void framework::update(float elapsed_time/*Elapsed seconds from last frame*/)
 	else if (gameEnd == 2)
 		ImGui::Text("gameEnd = 2 : Game Over");
 
-		ImGui::Text("gameEnd = 2 : Game Over");
+	ImGui::Text("Time: %.1f", StartTime);
 
-		ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
+	ImGui::Text("FPS: %.1f", current_fps);	ImGui::SameLine(); ImGui::Text("||Frame Time: %.2f ms", current_frame_time);
 
 
 	ImGui::Checkbox("flat_shading", &flat_shading);
@@ -814,9 +829,6 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		const float vx = static_cast<float>(mouse_client_pos.x);
 		const float vy = static_cast<float>(mouse_client_pos.y);
 
-		
-		
-
 		using namespace DirectX;
 		XMVECTOR nearPt = XMVector3Unproject(
 			XMVectorSet(vx, vy, 0.0f, 1.0f),
@@ -846,7 +858,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			{
 				pate_target.y = hit3.y;
 			}
-			
+
 			pate_target.z = hit3.z;
 		}
 
@@ -983,8 +995,8 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 			// 半透明で描画（線ではなく中身あり。嫌ならアルファ上げ下げする）
-			skinned_meshes[6]->render(immediate_context.Get(), world_box,
-				{ 1.0f, 0.2f, 0.2f, 0.35f }, nullptr, true);
+			//	skinned_meshes[6]->render(immediate_context.Get(), world_box,
+			//	{ 1.0f, 0.2f, 0.2f, 0.35f }, nullptr, true);
 		}
 	}
 
@@ -1017,8 +1029,9 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	{
 		using namespace DirectX;
-		XMMATRIX T = XMMatrixTranslation(pate_position.x, pate_position.y, pate_position.z);
-		XMMATRIX Scale = XMMatrixScaling(0.01f, 0.01f, 0.01f);
+		XMMATRIX T = XMMatrixTranslation(pate_position.x, pate_position.y - pate_half_extents.y - 0.005, pate_position.z);
+		XMMATRIX Scale = XMMatrixScaling(0.02f, 0.02f, 0.02f);
+		//XMMATRIX Scale = XMMatrixScaling(0.025f, 0.025f, 0.025f);
 		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
 			rotation_object3.x,
 			rotation_object3.y + 6.3,
@@ -1039,7 +1052,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 	{
 		using namespace DirectX;
 		XMMATRIX T = XMMatrixTranslation(kusi.pos.x, kusi.pos.y, kusi.pos.z);
-		XMMATRIX Scale = XMMatrixScaling(0.08f, 0.08f, 0.08f);
+		XMMATRIX Scale = XMMatrixScaling(0.07f, 0.16f, 0.07f);
 		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
 			rotation_object3.x,
 			rotation_object3.y,
@@ -1110,7 +1123,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 		using namespace DirectX;
 		// FBXはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
 		XMMATRIX T = XMMatrixTranslation(bun.pos.x, bun.pos.y, bun.pos.z);
-		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f); // 必要なら調整
+		XMMATRIX S = XMMatrixScaling(0.28f, 0.28f, 0.28f); // 必要なら調整
 
 
 		XMFLOAT4X4 world_bun;
@@ -1148,7 +1161,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 	{
 		using namespace DirectX;
 		// C.pos ではなく cheese.pos に変更 - P.half_extents.y
-		XMMATRIX T = XMMatrixTranslation(cheese.pos.x, cheese.pos.y - cheese.half_extents.y, cheese.pos.z);
+		XMMATRIX T = XMMatrixTranslation(cheese.pos.x, cheese.pos.y - cheese.half_extents.y - 0.01f, cheese.pos.z);
 		XMMATRIX S = XMMatrixScaling(0.3f, 0.35f, 0.3f);
 
 		// C.rotQuat ではなく cheese.rotQuat に変更
@@ -1189,11 +1202,11 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 			XMMATRIX Rp = XMMatrixRotationQuaternion(q);
 
 			XMFLOAT4X4 world_box;
-;
+			;
 			XMStoreFloat4x4(&world_box, C * Sbox * Rp * Tbox);
 
 			// 黄色っぽく表示
-			skinned_meshes[6]->render(immediate_context.Get(), world_box, { 1.0f, 1.0f, 0.0f, 0.35f }, nullptr, true);
+			//skinned_meshes[6]->render(immediate_context.Get(), world_box, { 1.0f, 1.0f, 0.0f, 0.35f }, nullptr, true);
 		}
 	}
 
@@ -1201,7 +1214,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 	{
 		using namespace DirectX;
 		XMMATRIX T = XMMatrixTranslation(bunUnder.pos.x, bunUnder.pos.y, bunUnder.pos.z);
-		XMMATRIX S = XMMatrixScaling(0.14f, 0.14f, 0.14f); // 他のモデルとスケールを合わせる
+		XMMATRIX S = XMMatrixScaling(0.28f, 0.28f, 0.28f); // 他のモデルとスケールを合わせる
 
 		XMVECTOR q = XMLoadFloat4(&bunUnder.rotQuat);
 		XMMATRIX Rp = XMMatrixRotationQuaternion(q);
@@ -1295,7 +1308,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 			XMStoreFloat4x4(&transform, scaleMat * transMat * worldMat);
 		}
-		}
+	}
 	{
 		using namespace DirectX;
 
@@ -1365,7 +1378,7 @@ void framework::render(float elapsed_time/*Elapsed seconds from last frame*/)
 
 	UINT sync_interval{ 0 };
 	swap_chain->Present(sync_interval, 0);
-	}
+}
 
 const int CheckMenu(const int* a, const int* b, int size)
 {
@@ -1483,6 +1496,8 @@ void framework::resolve_pair(int ia, int ib)
 void framework::simulate_bun(float dt)
 {
 	if (!bun.exists) return;
+
+	float bunGravityMultiplier = 15.0f;
 
 	// 重力
 	bun.vel.y += patty_gravity_y * dt;
@@ -1793,11 +1808,13 @@ void framework::initBulletWorld()
 	// ★ Buns_under (静的剛体) の作成
 	{
 		// サイズ設定 (見た目に合わせて調整)
-		bunUnder.half_extents = { 0.045f, 0.0020f, 0.045f };
+		bunUnder.half_extents = { 0.045f, 0.01, 0.045f };
+		//bunUnder.half_extents = { 0.045f, 0.0020f, 0.045f };
 
 		// 位置設定 (地面の上に置く)
 		// x, z は他の具材が落ちてくる位置(-0.3, -10.0)に合わせる
-		bunUnder.pos = { -0.3f, patty_ground_y + bunUnder.half_extents.y, -10.0f };
+		bunUnder.pos = { -0.3f, patty_ground_y, -10.0f };
+		//bunUnder.pos = { -0.3f, patty_ground_y + bunUnder.half_extents.y, -10.0f };
 
 		// 形状作成
 		m_bunUnderShape = new btBoxShape(btVector3(
@@ -1887,7 +1904,22 @@ void framework::Spawn(float dt)
 {
 	if (!allSpawn) return;
 
-	coolTimer += dt;
+	if (isWaitingForPhysics)
+	{
+		physicsWaitTimer += dt; // 実時間でカウント（早送りしない）
+		if (physicsWaitTimer >= 3.0f) // 3秒経過したら
+		{
+			EnablePhysicsForGameplay(); // ロック解除
+			allSpawn = false;           // スポーン処理全体を終了
+			isWaitingForPhysics = false;
+			physicsWaitTimer = 0.0f;
+		}
+		return; // 待機中はスポーン処理を行わない
+	}
+
+
+	float spawnSpeedMultiplier = 5.0f;
+	coolTimer += dt * spawnSpeedMultiplier;
 
 	// 1回だけスポーン
 	if (coolTimer >= interval && spawnIndex < result.size())
@@ -1910,8 +1942,8 @@ void framework::Spawn(float dt)
 		// 全て出現完了
 		if (spawnIndex >= result.size())
 		{
-			allSpawn = false;
-			EnablePhysicsForGameplay();
+			isWaitingForPhysics = true;   // 待機開始
+			physicsWaitTimer = 0.0f;      // タイマーリセット
 		}
 	}
 }
@@ -1921,7 +1953,7 @@ void framework::EnablePhysicsForGameplay()
 	if (!isSpawningPhase) return; // 既に解除済みなら何もしない
 	isSpawningPhase = false;
 
-	
+
 	// 共通設定用のラムダ式（設定を一括で行う）
 	auto setupBodyForGame = [](btRigidBody* body)
 		{
@@ -1929,10 +1961,10 @@ void framework::EnablePhysicsForGameplay()
 
 			// ロック解除
 			body->setLinearFactor(btVector3(1, 1, 1));
-			body->setAngularFactor(btVector3(1, 1, 1));
+			body->setAngularFactor(btVector3(1, 1, 0));
 
 			//  修正: 回転減衰（第2引数）を上げる
-			
+
 			// これで「置いているだけなら倒れない粘り強さ」が出ます
 			body->setDamping(0.05f, 1.8f);
 
@@ -1946,7 +1978,7 @@ void framework::EnablePhysicsForGameplay()
 	for (auto& p : patties) setupBodyForGame(p.body);
 	for (auto& c : cheeses) setupBodyForGame(c.body);
 
-	
+
 
 	// 下のバンズ（土台）も摩擦だけは合わせておく（動かない設定は維持される）
 	if (bunUnder.body)
@@ -1991,9 +2023,91 @@ void framework::CheckPateCollision()
 			c.body->activate(true);
 		}
 	}
-
-
 }
+void framework::Reset()
+{
+	// --- 物理エンジンのオブジェクト削除 ---
+
+	// Patties (パティ) の削除
+	for (auto& p : patties)
+	{
+		if (p.body)
+		{
+			m_btWorld->removeRigidBody(p.body);
+			delete p.body->getMotionState();
+			delete p.body;
+		}
+	}
+	patties.clear();
+	m_pattyBodies.clear();
+
+	// Cheeses (チーズ) の削除
+	for (auto& c : cheeses)
+	{
+		if (c.body)
+		{
+			m_btWorld->removeRigidBody(c.body);
+			delete c.body->getMotionState();
+			delete c.body;
+		}
+	}
+	cheeses.clear();
+	// m_cheeseBodies.clear(); // もし定義されている場合はクリア
+
+	// Bun (上のバンズ) の削除
+	if (bun.body)
+	{
+		m_btWorld->removeRigidBody(bun.body);
+		delete bun.body->getMotionState();
+		delete bun.body;
+		bun.body = nullptr;
+	}
+	bun.exists = false;
+	bun.pos = { -0.3f, 1.3f, -10.0f }; // 初期位置
+	bun.vel = { 0.0f, 0.0f, 0.0f };
+	bun_spawned_initial = false;
+
+	// --- ゲーム変数のリセット ---
+
+	// 串の状態リセット
+	kusi.pos = { -0.3f, 1.5f, -10.0f };
+	kusi.kusi_End = false;
+	kusi.move = false;
+
+	// 獲得メニューのリセット
+	for (int i = 0; i < MENU_MAX; i++)
+	{
+		kusi_menu[i] = 0;
+	}
+	menu_count = 0;
+
+	// ゲーム進行状態リセット
+	StartTime = 0;
+	gameEnd = 0;
+	spawnIndex = 0;
+	coolTimer = 0.0f;
+	allSpawn = true;
+	isSpawningPhase = true;
+	hitStop = false;
+
+	isWaitingForPhysics = false;
+	physicsWaitTimer = 0.0f;
+
+	// スポーンパターンの再生成
+	result.clear();
+	generatePattern();
+
+	// 初期生成フラグのリセット
+	patty_spawned_initial = false;
+
+	// BGMを最初から再生し直す場合（任意）
+	if (bgmSource)
+	{
+		bgmSource->Stop();
+		bgmSource->Play(true);
+	}
+}
+
 
 bool framework::uninitialize()
 {
