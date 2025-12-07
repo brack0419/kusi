@@ -38,6 +38,8 @@ public:
 
 	std::unique_ptr<skinned_mesh> skinned_meshes[20];
 
+	std::unique_ptr<sprite_batch> sprite_batches[5];
+
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> effect_shaders[2];
 
 	enum class SAMPLER_STATE { POINT, LINEAR, ANISOTROPIC, LINEAR_BORDER_BLACK, LINEAR_BORDER_WHITE, LINEAR_CLAMP };

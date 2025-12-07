@@ -73,6 +73,9 @@ void SceneGame::Initialize()	// deviceとimmediate_contextを定義している�
 	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.fbx");
 	skinned_meshes[11] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\hands38.fbx");
 	skinned_meshes[12] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Vegetable.fbx");
+
+	sprite_batches[1] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\select.png", 1);
+
 	bgmGame = Audio::Instance().LoadAudioSource(".\\resources\\ハンバーガーショップの戦い.wav");
 
 	if (bgmGame)
@@ -1129,6 +1132,9 @@ void SceneGame::Render(float elapsedTime)
 	if (selectMenu)
 	{
 		fw_->immediate_context->ClearRenderTargetView(fw_->render_target_view.Get(), color);
+		sprite_batches[1]->begin(fw_->immediate_context.Get());
+		sprite_batches[1]->render(fw_->immediate_context.Get(), 0, 0, 1920, 1080);
+		sprite_batches[1]->end(fw_->immediate_context.Get());
 	}
 }// Renderのマージ！！}
 

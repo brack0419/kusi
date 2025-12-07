@@ -60,6 +60,8 @@ void SceneTutorial::Initialize()
 	// skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese.fbx");
 	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.fbx");
 
+	sprite_batches[0] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text.png", 1);
+
 	tutorialState = TutorialState::INTRO;
 
 	initBulletWorld();   // ★ 追加
@@ -1010,6 +1012,10 @@ void SceneTutorial::Render(float elapsedTime)
 	fw_->bit_block_transfer->blit(fw_->immediate_context.Get(), fw_->framebuffers[0]->shader_resource_views[0].GetAddressOf(), 0, 1, fw_->pixel_shaders[0].Get());
 	fw_->framebuffers[1]->deactivate(fw_->immediate_context.Get());
 
+
+	sprite_batches[0]->begin(fw_->immediate_context.Get());
+	sprite_batches[0]->render(fw_->immediate_context.Get(), 1920 / 2, 1080 / 2, 1920 / 10, 1080 / 10);
+	sprite_batches[0]->end(fw_->immediate_context.Get());
 }// Renderのマージ！！}
 
 void SceneTutorial::add_patty(const DirectX::XMFLOAT3& p,

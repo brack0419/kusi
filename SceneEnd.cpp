@@ -16,9 +16,11 @@ void SceneEnd::Initialize()
 {
 	HRESULT hr{ S_OK };
 
-	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon5.fbx");
+	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon6.fbx");
 	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop40.fbx");
-	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon6.fbx");
+	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon7.fbx");
+
+	sprite_batches[0] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\END.png", 1);
 }
 
 //I—¹‰»
@@ -261,6 +263,10 @@ void SceneEnd::Render(float elapsedTime)
 	fw_->immediate_context->RSSetState(fw_->rasterizer_states[static_cast<size_t>(RASTER_STATE::CULL_NONE)].Get());
 	fw_->bit_block_transfer->blit(fw_->immediate_context.Get(), fw_->framebuffers[0]->shader_resource_views[0].GetAddressOf(), 0, 1, fw_->pixel_shaders[0].Get());
 	fw_->framebuffers[1]->deactivate(fw_->immediate_context.Get());
+
+	sprite_batches[0]->begin(fw_->immediate_context.Get());
+	sprite_batches[0]->render(fw_->immediate_context.Get(), 0, 0, 1920, 1080);
+	sprite_batches[0]->end(fw_->immediate_context.Get());
 }
 
 void SceneEnd::DrawGUI()
