@@ -1,16 +1,13 @@
-#pragma once
+﻿#pragma once
 
 #include <windows.h>
 #include <tchar.h>
 #include <sstream>
-
+#include "SceneManager.h"
 #include "misc.h"
 #include "high_resolution_timer.h"
 
 #include <windowsx.h>
-
-#define BT_NO_SIMD_OPERATOR_OVERLOADS
-#include <bullet/btBulletDynamicsCommon.h>
 
 #ifdef USE_IMGUI
 #include "imgui/imgui.h"
@@ -50,7 +47,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "bloom.h"
 
 #include "Audio.h"
-#include "AudioSource.h"  
+#include "AudioSource.h"
 
 #if 1
 CONST LONG SCREEN_WIDTH{ 1920 };
@@ -63,47 +60,9 @@ CONST BOOL FULLSCREEN{ TRUE };
 #endif
 CONST LPWSTR APPLICATION_NAME{ L"X3DGP" };
 
-
-#define MENU_MAX 10
-#define SPAWN_MAX 10
-#define SPAWN_HIGH 0.6f
-
-#define KUSI_SPEED 0.001;
-
 class framework
 {
 public:
-	float StartTime = 0;
-
-	AudioSource* bgmSource;
-
-	std::vector<int> result;
-
-	int spawnIndex = 0;
-
-	const float interval = 1.00f;
-
-	bool allSpawn = true;
-
-	int callCount = 0;
-
-	float coolTimer = 0.0f;
-
-	int gameEnd = 0; // 0 : 初期状態* 1 : ゲームクリア* 2 : ゲームオーバー
-	//  ゲームの状態管理
-	bool isSpawningPhase = true; // true: 積み上げ中, false: プレイ中
-
-	float spawnJitter = 0.05f;
-
-	void EnablePhysicsForGameplay();
-
-	void CheckPateCollision();
-
-	void Reset();
-
-	int karimenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
-	bool isWaitingForPhysics = false;
-	float physicsWaitTimer = 0.0f;
 
 	bool hitStop = false;
 
@@ -111,6 +70,21 @@ public:
 	float								hitStopSecondsLength = 5.0f;
 
 	CONST HWND hwnd;
+
+	// Direct3Dデバイスの取得
+	Microsoft::WRL::ComPtr<ID3D11Device> get_device() const { return device; }
+
+	// 即時コンテキストの取得
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> get_context() const { return immediate_context; }
+
+	// スワップチェインの取得
+	Microsoft::WRL::ComPtr<IDXGISwapChain> get_swapchain() const { return swap_chain; }
+
+	// レンダーターゲットビューの取得
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> get_rtv() const { return render_target_view; }
+
+	// 深度ステンシルビューの取得
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> get_dsv() const { return depth_stencil_view; }
 
 	Microsoft::WRL::ComPtr<ID3D11Device> device;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate_context;
@@ -133,34 +107,11 @@ public:
 	enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE };
 	Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[4];
 
-	// Bullet core
-	btDefaultCollisionConfiguration* m_btConfig = nullptr;
-	btCollisionDispatcher* m_btDispatcher = nullptr;
-	btBroadphaseInterface* m_btBroadphase = nullptr;
-	btSequentialImpulseConstraintSolver* m_btSolver = nullptr;
-	btDiscreteDynamicsWorld* m_btWorld = nullptr;
-
-	// 共有の形状（全部同じ箱なら一個でよい）
-	btBoxShape* m_pattyShape = nullptr;
-	//btCollisionShape* m_groundShape = nullptr;   // ← 追加
-
-	// ★ 追加: パテ用の形状とボディ
-	btBoxShape* m_pateShape = nullptr;
-	btRigidBody* m_pateBody = nullptr;
-
-	// Patty 用 rigid body のリスト（Patty とインデックス対応）
-	std::vector<btRigidBody*>           m_pattyBodies;
-
-	// 地面
-
-
-
 	struct scene_constants
 	{
 		DirectX::XMFLOAT4X4 view_projection;
 		DirectX::XMFLOAT4 light_direction;
 		// UNIT.16
-		DirectX::XMFLOAT4 camera_position;
 		// DYNAMIC_TEXTURE
 		float time = 0;
 		float elapsed_time = 0;
@@ -205,18 +156,16 @@ public:
 
 		bool isColliding = false; // ← 追加
 		bool isStuck = false; // ← 串に刺さって固定されているか
-
-		btRigidBody* body = nullptr;          // ★ 追加
-		DirectX::XMFLOAT4 rotQuat{ 0,0,0,1 };   // ★ 見た目用の回転
 	};
 
 	std::vector<Patty> patties; // Patty 一覧（将来 N 体）
 
 	// グローバル物理パラメータ
 	bool patty_sim_enabled = true;
-	float patty_gravity_y = -0.3f; // 下向き重力（単位系に応じて微調整）
+	float patty_gravity_y = -0.8f; // 下向き重力（単位系に応じて微調整）
 	float patty_ground_y = 0.235f; // 地面/テーブルの Y（シーンに合わせて）
-	DirectX::XMFLOAT3 patty_default_half_extents{ 0.035f, 0.008f, 0.038f };
+	float patty_default_radius = 0.02f; // Patty の見た目に合わせて調整
+	DirectX::XMFLOAT3 patty_default_half_extents{ 0.035f, 0.012f, 0.020f };
 	float patty_default_mass = 1.0f;
 	float patty_default_restitution = 0.0f; // Patty 同士の最小反発係数
 	// 生成時のX
@@ -232,62 +181,15 @@ public:
 		float restitution);
 	void simulate_patties(float dt);
 	void resolve_pair(int ia, int ib);
-
-	std::vector<int> generatePattern();
-	//void prepareSpawnList();
-	void Spawn(float dt);
 	//////////////////////////////////
 
-	struct Cheese {
-		DirectX::XMFLOAT3 pos;
-		DirectX::XMFLOAT3 vel;
-		DirectX::XMFLOAT3 half_extents;
-		float mass;
-		float restitution;
-
-		bool isColliding = false;
-		bool isStuck = false;
-
-		btRigidBody* body = nullptr;
-		DirectX::XMFLOAT4 rotQuat{ 0,0,0,1 };
-	};
-
-	std::vector<Cheese> cheeses; // チーズ一覧
-
-	// Bullet用形状
-	btBoxShape* m_cheeseShape = nullptr;
-	std::vector<btRigidBody*> m_cheeseBodies;
-
-	// パラメータ
-	DirectX::XMFLOAT3 cheese_default_half_extents{ 0.035f, 0.004f, 0.048f };
-	float cheese_default_mass = 0.5f;
-	float cheese_default_restitution = 0.0f;
-
-	// 関数
-	void add_cheese(const DirectX::XMFLOAT3& pos,
-		const DirectX::XMFLOAT3& half_extents,
-		float mass,
-		float restitution);
-
-	void CheckKusiCheeseCollision(); // 串との当たり判定
-
-
-	struct BunUnder {
-		DirectX::XMFLOAT3 pos;
-		DirectX::XMFLOAT3 half_extents;
-		DirectX::XMFLOAT4 rotQuat{ 0, 0, 0, 1 }; // 回転
-		btRigidBody* body = nullptr;
-	};
-	BunUnder bunUnder;
-
-	// Bullet用
-	btBoxShape* m_bunUnderShape = nullptr;
-
-
-
+	float ground_z_center = -10.0f;
+	float ground_z_half_range = 0.010f;  //地面
+	bool  ground_range_visible = true;
+	DirectX::XMFLOAT4 ground_range_color{ 0.2f, 0.6f, 1.0f, 0.20f };
 	Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffers[8];
 
-	DirectX::XMFLOAT3 camera_position{ -8.8f, 7.5f, 0.0f };
+	DirectX::XMFLOAT3 camera_position{ 0.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT4 light_direction{ -1.0, -0.8f, -1.0f, 0.0f };
 	DirectX::XMFLOAT3 camera_focus{ 0.0f, 0.283f, -10.0f };
 	float rotateX{ DirectX::XMConvertToRadians(5) };
@@ -301,9 +203,14 @@ public:
 	DirectX::XMFLOAT3 scaling{ 1, 1, 1 };
 	DirectX::XMFLOAT3 rotation{ 0, 0.643f, 0 };
 	DirectX::XMFLOAT4 material_color{ 1 ,1, 1, 1 };
+	DirectX::XMFLOAT4 material_color1{ 1 ,1, 1, 1 };
+	DirectX::XMFLOAT4 material_color2{ 1 ,1, 1, 1 };
+	DirectX::XMFLOAT4 material_color3{ 1 ,1, 1, 1 };
 	DirectX::XMFLOAT3 rotation_object3{ 0.0f, 3.115f, 0.0f };
 	DirectX::XMFLOAT3 rotation_object4{ 0.0f, 3.13f, 0.0f };
+	DirectX::XMFLOAT3 rotation_object11{ 0.0f, 3.13f, 0.0f };
 	DirectX::XMFLOAT3 translation_object3{ -0.254f, 0.0f, -9.391f };
+	DirectX::XMFLOAT3 translation_object11{ -0.254f, 0.0f, -9.391f };
 
 	DirectX::XMFLOAT3 model_position_man{ 0.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 model_position_walk{ 0.0f, 0.0f, 0.0f };
@@ -349,23 +256,15 @@ public:
 	struct Bun {
 		DirectX::XMFLOAT3 pos{ -0.3f, 1.3f, 0.0f };
 		DirectX::XMFLOAT3 vel{ 0.0f, 0.0f, 0.0f };
-		DirectX::XMFLOAT3 half_extents{ 0.055f, 0.008f, 0.058f };
+		DirectX::XMFLOAT3 half_extents{ 0.020f, 0.011f, 0.020f };
 		float mass{ 1.0f };
 		float restitution{ 0.0f };
 		bool exists{ false };
-
-		// ★ 追加: Bullet用
-		btRigidBody* body = nullptr;
-		DirectX::XMFLOAT4 rotQuat{ 0, 0, 0, 1 };
 	};
 	Bun bun;
-	btBoxShape* m_bunUpShape = nullptr;
 	bool bun_spawned_initial = false;
 	bool bun_collider_visible = true;
 	DirectX::XMFLOAT4 bun_collider_color{ 0.2f, 1.0f, 0.2f, 0.35f };
-	/*void spawn_bun_up();
-
-	void CheckBunCollision();*/
 
 	// 1体だけの簡易シミュレーション（重力＆床Y）
 	void simulate_bun(float dt);
@@ -382,7 +281,7 @@ public:
 		//串
 	struct Kusi
 	{
-		DirectX::XMFLOAT3 pos{ -0.3f, 1.5f, -10.0f };
+		DirectX::XMFLOAT3 pos{ -0.3f, 1.0f, -10.0f };
 		DirectX::XMFLOAT3 half_extents{ 0.01f, 0.01f, 0.01f };
 
 		bool kusi_End = false;
@@ -390,7 +289,6 @@ public:
 	};
 	Kusi kusi;
 
-	int kusi_menu[MENU_MAX] = { 0 }; // 0 : 初期状態　1 : 肉　2 : チーズ　3 : クラウン　4 : ヒール
 	//DirectX::XMFLOAT3 kusi_position{ -0.3f, 1.0f, -10.0f };
 	//DirectX::XMFLOAT3 kusi_half{ 0.01f, 0.01f, 0.01f };
 	//bool kusi = false;
@@ -400,7 +298,7 @@ public:
 	bool patty_collider_visible = true;
 	DirectX::XMFLOAT4 patty_collider_color{ 1.0f, 0.2f, 0.2f, 0.35f };
 	// コライダー中心は pate_position（既存）を使用
-	DirectX::XMFLOAT3 pate_half_extents{ 0.08f, 0.004f, 0.01f }; // X=幅/2, Y=厚み/2, Z=奥行/2
+	DirectX::XMFLOAT3 pate_half_extents{ 0.060f, 0.025f, 0.015f }; // X=幅/2, Y=厚み/2, Z=奥行/2
 	float pate_restitution = 0.0f; // 反発
 	float pate_plane_y = 0.373f; // マウス追従に使う平面の高さ（pate_position.y に反映）
 	//////////////////////////
@@ -409,14 +307,12 @@ public:
 	float patties_z_offset_prev = 0.0f; // 前フレーム値（差分適用に利用）
 	int patty_selected_index = -1; // 選択中（-1: なし）
 	/////////////////////////////
+	// 1体の Patty（球）と pate（AABB）の衝突解決
+	void resolve_pate_collision(struct Patty& S);
 
+	//void CheckKusiPattyCollision();
 
-
-	void CheckKusiPattyCollision();
-
-	void initBulletWorld();
-
-	void framework::resolve_kusi_collision(Patty& S);
+	//void framework::resolve_kusi_collision(Patty& S);
 	// フレーム時間履歴用（60フレーム分）
 	static constexpr int FPS_HISTORY_COUNT = 120;
 	float frame_times[FPS_HISTORY_COUNT] = {};
@@ -488,11 +384,6 @@ public:
 #endif
 		switch (msg)
 		{
-			//マウスホイールの入力を受け取る
-		case WM_MOUSEWHEEL:
-			wheel += GET_WHEEL_DELTA_WPARAM(wparam);
-			break;
-
 		case WM_PAINT:
 		{
 			PAINTSTRUCT ps;
@@ -525,7 +416,10 @@ public:
 			mouse_client_pos.y = GET_Y_LPARAM(lparam);
 		}
 		break;
-		//////////////////////////
+		case WM_MOUSEWHEEL:
+			wheel += GET_WHEEL_DELTA_WPARAM(wparam);
+			break;
+			//////////////////////////
 
 		default:
 			return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -560,4 +454,3 @@ private:
 		}
 	}
 };
-

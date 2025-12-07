@@ -103,5 +103,4 @@ AudioResource::AudioResource(const char* filename)
 // デストラクタ
 AudioResource::~AudioResource()
 {
-
 }

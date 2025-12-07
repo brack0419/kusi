@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <vector>
 #include <Windows.h>
 
@@ -51,5 +50,4 @@ private:
 	Fmt						fmt;
 	std::vector<UINT8>		data;
 	WAVEFORMATEX			wfx;
-
 };
