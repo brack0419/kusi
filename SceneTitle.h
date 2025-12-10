@@ -51,11 +51,14 @@ public:
 	DirectX::XMFLOAT3 translation_object3{ -0.254f, 0.0f, -9.391f };
 	DirectX::XMFLOAT3 translation_object4{ -0.254f, 0.0f, -9.391f };
 	DirectX::XMFLOAT3 translation_object5{ -0.254f, 0.0f, -9.391f };
+	DirectX::XMFLOAT3 translation_object6{ 7.818f, -4.836f, -15.636f };
 	DirectX::XMFLOAT3 rotation_object0{ 0.0f, 3.115f, 0.0f };
 	DirectX::XMFLOAT3 rotation_object2{ 0.0f, 3.115f, 0.0f };
 	DirectX::XMFLOAT3 rotation_object3{ 0.0f, 3.115f, 0.0f };
 	DirectX::XMFLOAT3 rotation_object4{ 0.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 rotation_object5{ 0.0f, 0.0f, 0.0f };
+	DirectX::XMFLOAT3 rotation_object6{ 0.036f, -2.8f, 0.0f };
+
 
 	DirectX::XMFLOAT4 material_color{ 1 ,1, 1, 1 };
 	DirectX::XMFLOAT4 material_color1{ 1 ,1, 1, 1 };
@@ -65,6 +68,10 @@ public:
 	DirectX::XMFLOAT4 material_color_title6 = { 1,1,1,1 }; // mesh[6]専用
 
 	bool flat_shading = false;
+	float click_min_x1 = 1277;
+	float click_min_y1 = 638;
+	float click_max_x1 = 1844;
+	float click_max_y1 = 833;
 
 	float title0_brightness = 1.0f;
 	float title2_brightness = 1.0f;
@@ -83,7 +90,9 @@ private:
 	float camera_distance = 5.0f;   // 初期距離（好きな値）
 	float anim_time_ = 0.0f;
 	DirectX::XMFLOAT2 click_min = { 58.134f, 638.063f };
+	DirectX::XMFLOAT2 click_min1 = { 58.134f, 638.063f };
 	DirectX::XMFLOAT2 click_max = { 542.062f, 849.329f };
+	DirectX::XMFLOAT2 click_max1 = { 542.062f, 849.329f };
 	// タイトル出現演出用
 	float titleAppearTimer_ = 0.0f;
 	bool titleAppearing_ = true;
@@ -95,10 +104,12 @@ private:
 	float fadeAlpha = 0.0f;      // 0.0 = 真っ暗, 1.0 = 完全表示
 	bool  fadeCompleted = false;
 
+	bool isHover1 = false;
 	bool isHover = false;
 	float defaultLightX = 0.0f;
 	DirectX::XMFLOAT4 defaultTitle6Color = { 0,0,0,0 };
-
+	float defaultLightX1 = 0.0f;
+	DirectX::XMFLOAT4 defaultTitle6Color1 = { 0,0,0,0 };
 	float neonFlickerTimer3 = 0.0f;
 	float neonFlickerIntensity3 = 1.0f;
 	float neonTargetIntensity3 = 1.0f;

@@ -19,12 +19,14 @@ void SceneTitle::Initialize()
 	HRESULT hr{ S_OK };
 
 	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon7.cereal");
-	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop40.cereal");
+	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop41.cereal");
 	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon6.cereal");
 	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\human.cereal");
 	skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\hamburger_man2.cereal");
 	skinned_meshes[5] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon_title1.cereal");
 	skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon_title2.cereal");
+	skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\tutorial.fbx");
+
 
 	bgmTitle = Audio::Instance().LoadAudioSource(".\\resources\\僕のだぞっ！.wav");
 
@@ -77,6 +79,7 @@ void SceneTitle::Initialize()
 	title2_brightness = 4.0f;
 	title5_brightness = 7.0f;
 	title6_brightness = 3.333f;
+	ShowCursor(TRUE);
 }
 
 //終了化
@@ -195,11 +198,18 @@ void SceneTitle::Update(float elaspedTime)
 		}
 	}
 
-	if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+	if (fw_->mouse_client_pos.x >= click_min_x1 &&
+		fw_->mouse_client_pos.x <= click_max_x1 &&
+		fw_->mouse_client_pos.y >= click_min_y1 &&
+		fw_->mouse_client_pos.y <= click_max_y1)
 	{
-		SceneManager::instance().ChangeScene(new SceneTutorial(hwnd, fw_));
-		return;
+		if (GetAsyncKeyState(VK_LBUTTON) & 0x8000)
+		{
+			SceneManager::instance().ChangeScene(new SceneTutorial(hwnd, fw_));
+			return;
+		}
 	}
+
 
 	const float hue_speed = 0.07f;
 	const float breathe_speed = 1.0f;
@@ -310,9 +320,9 @@ void SceneTitle::Update(float elaspedTime)
 
 	material_color3 =
 	{
-		flickerBrightness3,
-		flickerBrightness3,
-		flickerBrightness3,
+		flickerBrightness3 * 1.0f,  // R（強め）
+		flickerBrightness3 * 0.65f, // G（中くらい）
+		flickerBrightness3 * 0.25f, // B（弱め）
 		1.0f
 	};
 
@@ -471,6 +481,31 @@ void SceneTitle::Render(float elapsedTime)
 		bool prev_flat = flat_shading;
 		flat_shading = true;
 		skinned_meshes[6]->render(
+			fw_->immediate_context.Get(),
+			world2,
+			material_color3,   // ← 専用カラー
+			nullptr,
+			flat_shading
+		);
+		flat_shading = prev_flat;
+	}
+	{
+		DirectX::XMMATRIX T2 = DirectX::XMMatrixTranslation(
+			translation_object6.x,
+			translation_object6.y,
+			translation_object6.z
+		);
+		DirectX::XMMATRIX Scale2 = DirectX::XMMatrixScaling(0.6f, 0.6f, 0.6f);
+		DirectX::XMMATRIX R2 = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object6.x,
+			rotation_object6.y,
+			rotation_object6.z
+		);
+		DirectX::XMFLOAT4X4 world2;
+		DirectX::XMStoreFloat4x4(&world2, C* Scale2* R2* T2);
+		bool prev_flat = flat_shading;
+		flat_shading = true;
+		skinned_meshes[7]->render(
 			fw_->immediate_context.Get(),
 			world2,
 			material_color3,   // ← 専用カラー

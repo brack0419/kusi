@@ -10,7 +10,7 @@
 #define SPAWN_MAX 10
 #define SPAWN_HIGH 0.6f
 
-#define KUSI_SPEED 0.001;
+#define KUSI_SPEED 0.002;
 
 class SceneTutorial : public Scene
 {
@@ -52,9 +52,9 @@ public:
 
 	bool IsMouseClicked();
 
-	std::unique_ptr<skinned_mesh> skinned_meshes[11];
+	std::unique_ptr<skinned_mesh> skinned_meshes[20];
 
-	std::unique_ptr<sprite_batch> sprite_batches[11];
+	std::unique_ptr<sprite_batch> sprite_batches[20];
 
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> effect_shaders[2];
 
@@ -85,7 +85,7 @@ public:
 	POINT cursor_position;
 	float wheel{ 0 };
 	float distance{ 0.1f };
-
+	//std::unique_ptr<sprite_batch> sprite_batches[18];
 	DirectX::XMFLOAT3 center_of_rotation;
 	DirectX::XMFLOAT3 translation{ 0, 0, 0 };
 	DirectX::XMFLOAT3 scaling{ 1, 1, 1 };
@@ -234,7 +234,6 @@ public:
 
 	const float interval = 0.3f;
 
-
 	bool isWaitingForPhysics = false;
 	float physicsWaitTimer = 0.0f;
 	std::vector<int> result;
@@ -264,10 +263,6 @@ public:
 	float patty_default_restitution = 0.0f; // Patty ìØémÇÃç≈è¨îΩî≠åWêî
 
 	float patty_spawn_x = -0.3f;
-
-
-
-
 
 	DirectX::XMFLOAT3 pate_position{ -0.4f, 3.0f, 0.0f };
 	DirectX::XMFLOAT3 pate_target{ -0.4f, 3.0f, 0.0f };
@@ -305,8 +300,6 @@ public:
 	void EnablePhysicsForGameplay();
 
 	void CheckPateCollision();
-
-
 
 	void Reset();
 

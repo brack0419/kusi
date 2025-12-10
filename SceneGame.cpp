@@ -15,10 +15,18 @@
 #include <vector>
 #include<random>
 
+
 int menu_count = 0;
 static float animation_tick_walk = 0.0f;
+static float animation_tick = 0.0f;
+static float animation_tick1 = 0.0f;
 static bool isAnimationFinished = false;   // ★ 追加
 static float animation_speed = 0.85f;
+static int play_count = 0;        // 何回再生したか
+static bool isPlaying = false;   // 再生中フラグ
+static bool wasRPressed = false;   // 押しっぱなし防止用
+float saveTime = 0;
+
 
 int SceneGame::CheckMenu(const int* a, const int* b, int size)
 {
@@ -45,34 +53,39 @@ void SceneGame::Initialize()	// deviceとimmediate_contextを定義している�
 {
 	HRESULT hr{ S_OK };
 
-	//fw_->skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty4.fbx");
-	//fw_->skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop5.fbx");
-	//fw_->skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.fbx");
-	//skinned_meshes[5] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\bus3.fbx");
-	//fw_->skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.fbx");
+	//fw_->skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty4.cereal");
+	//fw_->skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop5.cereal");
+	//fw_->skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.cereal");
+	//skinned_meshes[5] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\bus3.cereal");
+	//fw_->skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.cereal");
 	//fw_->dynamic_texture = std::make_unique<framebuffer>(fw_->device.Get(), 512, 512);
-	//fw_->skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.fbx");
-	//fw_->skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up.fbx");
-	//fw_->skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under.fbx");
-	//fw_->skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese.fbx");
+	//fw_->skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.cereal");
+	//fw_->skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up.cereal");
+	//fw_->skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under.cereal");
+	//fw_->skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese.cereal");
 
-	//skinned_meshes[0] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\hamburger_man.fbx");
-	//skinned_meshes[1] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\load_hamburger.fbx");
-	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty.fbx");
-	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop7.fbx");
-	skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.fbx");
-	//skinned_meshes[5] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\bus.fbx");
+	//skinned_meshes[0] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\hamburger_man.cereal");
+	//skinned_meshes[1] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\load_hamburger.cereal");
+	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty.cereal");
+	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop22.cereal");
+	skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.cereal");
+	//skinned_meshes[5] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\bus.cereal");
 
-	skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.fbx");
+	skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.cereal");
 	fw_->dynamic_texture = std::make_unique<framebuffer>(fw_->device.Get(), 512, 512);
 
-	skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.fbx");
-	skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up1.fbx");
-	skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under1.fbx");
+	skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.cereal");
+	skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up1.cereal");
+	skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under1.cereal");
 
-	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.fbx");
-	skinned_meshes[11] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\hands38.fbx");
-	skinned_meshes[12] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Vegetable.fbx");
+	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.cereal");
+	skinned_meshes[11] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\hands38.cereal");
+	skinned_meshes[12] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Vegetable.cereal");
+	skinned_meshes[13] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\luser8.cereal");
+	skinned_meshes[14] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\menu1.fbx");
+	skinned_meshes[15] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\menu2.fbx");
+	skinned_meshes[16] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\menu3.fbx");
+
 
 	sprite_batches[1] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\select.png", 1);
 
@@ -101,6 +114,9 @@ void SceneGame::Initialize()	// deviceとimmediate_contextを定義している�
 	target_camera_focus_y = camera_focus.y;
 
 	target_object_y = translation_object11.y;
+	saveTime = 0;
+
+	fw_->bloomer->bloom_intensity = 0.15;
 	//prepareSpawnList();
 }
 
@@ -119,6 +135,8 @@ void SceneGame::Finalize()
 // 更新処理
 void SceneGame::Update(float elapsedTime)
 {
+	fw_->bloomer->bloom_extraction_threshold = 0.268f;
+	fw_->bloomer->bloom_intensity = 0.23f;
 	if (selectMenu)
 	{
 		if (fw_->mouse_client_pos.x >= 0 &&
@@ -130,6 +148,8 @@ void SceneGame::Update(float elapsedTime)
 			{
 				ifMenu = 1;
 				selectMenu = false;
+				generatePattern();
+
 			}
 		}
 		if (fw_->mouse_client_pos.x >= 641 &&
@@ -141,6 +161,8 @@ void SceneGame::Update(float elapsedTime)
 			{
 				ifMenu = 2;
 				selectMenu = false;
+				generatePattern();
+
 			}
 		}
 		if (fw_->mouse_client_pos.x >= 1281 &&
@@ -152,6 +174,8 @@ void SceneGame::Update(float elapsedTime)
 			{
 				ifMenu = 3;
 				selectMenu = false;
+				generatePattern();
+
 			}
 		}
 	}
@@ -162,15 +186,18 @@ void SceneGame::Update(float elapsedTime)
 		if (!isAnimationStarted)
 		{
 			animation_tick_walk = 0.0f;   // ← リセット
+			animation_tick = 0.0f;   // ← リセット
 			isAnimationStarted = true;    // ← 開始フラグON
 		}
-		// ★ SPACEキーが「押された瞬間」だけ判定
-		if ((GetAsyncKeyState(VK_SPACE) & 0x0001))
+		// ★ Hキーが「押された瞬間」だけ判定
+		if ((GetAsyncKeyState('H') & 0x0001))
 		{
 			// ★ 再生していない or 再生が完全に終わったときだけ再スタート
 			if (!isAnimationStarted || isAnimationFinished)
 			{
 				animation_tick_walk = 0.0f;
+
+				animation_tick = 0.0f;
 				isAnimationStarted = true;
 				isAnimationFinished = false;
 				animation_speed = 1.5f;
@@ -211,6 +238,7 @@ void SceneGame::Update(float elapsedTime)
 
 			if (gameEnd == 1)
 			{
+				saveTime = StartTime;
 				SceneManager::instance().ChangeScene(new SceneEnd(fw_));
 			}
 			if (gameEnd == 2)
@@ -222,6 +250,17 @@ void SceneGame::Update(float elapsedTime)
 
 		// SceneEnd へ
 		//SceneManager::instance().ChangeScene(new SceneEnd(fw_));
+		bool isRPressed = (GetAsyncKeyState('R') & 0x8000);
+
+		if (isRPressed && !wasRPressed && !isPlaying)  // ★ isPlaying を追加
+		{
+			// 再生中でない時だけスタート
+			animation_tick1 = 0.0f;
+			play_count = 0;
+			isPlaying = true;
+		}
+
+		wasRPressed = isRPressed;
 
 		static bool prev_R = false;
 		bool now_R = (GetAsyncKeyState('R') & 0x8000);
@@ -312,8 +351,12 @@ void SceneGame::Update(float elapsedTime)
 		fw_->wheel = 0.0f;
 
 		static bool prev_down = false;
-		bool now_down = (GetAsyncKeyState(VK_DOWN) & 0x8000);
-		//bool now_down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+		//bool now_down = (GetAsyncKeyState(VK_DOWN) & 0x8000);
+		
+		if (StartTime >= 5.0f)
+		{
+			now_down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+		}
 
 		if (now_down && !prev_down) { // 押した瞬間だけ反応
 			kusi.move = !kusi.move;               // トグル
@@ -444,14 +487,12 @@ void SceneGame::Update(float elapsedTime)
 				btQuaternion q = tr.getRotation();
 				V.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
 			}
-
-
 		}
 
 		simulate_bun(elapsedTime);
 		CheckKusiCheeseCollision();
 		CheckKusiPattyCollision();
-		CheckKusiVegetableCollision(); 
+		CheckKusiVegetableCollision();
 	}
 }
 
@@ -647,7 +688,7 @@ void SceneGame::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// キューブFBXの実寸（1辺サイズ）を取得して正規化
+		// キューブcerealの実寸（1辺サイズ）を取得して正規化
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -699,7 +740,105 @@ void SceneGame::Render(float elapsedTime)
 		skinned_meshes[3]->render(fw_->immediate_context.Get(), world, material_color, nullptr, flat_shading);
 		flat_shading = prev_flat;
 	}
+	if (ifMenu == 1)
+	{
+		DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+			translation_object3.x,
+			translation_object3.y,
+			translation_object3.z
+		);
 
+		DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+
+		DirectX::XMFLOAT4X4 world;
+		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
+
+		bool prev_flat = flat_shading;
+		flat_shading = false;
+
+		// ★ ここが可変になる
+		skinned_meshes[14]->render(
+			fw_->immediate_context.Get(),
+			world,
+			material_color,
+			nullptr,
+			flat_shading
+		);
+
+		flat_shading = prev_flat;
+	}
+	else if (ifMenu == 2)
+	{
+		DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+			translation_object3.x,
+			translation_object3.y,
+			translation_object3.z
+		);
+
+		DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+
+		DirectX::XMFLOAT4X4 world;
+		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
+
+		bool prev_flat = flat_shading;
+		flat_shading = false;
+
+		// ★ ここが可変になる
+		skinned_meshes[15]->render(
+			fw_->immediate_context.Get(),
+			world,
+			material_color,
+			nullptr,
+			flat_shading
+		);
+
+		flat_shading = prev_flat;
+	}
+	else if (ifMenu == 3)
+	{
+		DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+			translation_object3.x,
+			translation_object3.y,
+			translation_object3.z
+		);
+
+		DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+
+		DirectX::XMFLOAT4X4 world;
+		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
+
+		bool prev_flat = flat_shading;
+		flat_shading = false;
+
+		// ★ ここが可変になる
+		skinned_meshes[16]->render(
+			fw_->immediate_context.Get(),
+			world,
+			material_color,
+			nullptr,
+			flat_shading
+		);
+
+		flat_shading = prev_flat;
+	}
 	{
 		using namespace DirectX;
 		XMMATRIX T = XMMatrixTranslation(
@@ -781,7 +920,8 @@ void SceneGame::Render(float elapsedTime)
 
 			if (isAnimationStarted && !isAnimationFinished)   // ★ 再生中のみ更新
 			{
-				frame_index = static_cast<int>(animation_tick_walk * anim_walk.sampling_rate);
+				//frame_index = static_cast<int>(animation_tick_walk * anim_walk.sampling_rate);
+				frame_index = static_cast<int>(animation_tick * anim_walk.sampling_rate);
 
 				if (frame_index >= anim_walk.sequence.size() - 1)
 				{
@@ -790,7 +930,9 @@ void SceneGame::Render(float elapsedTime)
 				}
 				else
 				{
-					animation_tick_walk += elapsedTime * animation_speed;
+					//animation_tick_walk += elapsedTime * animation_speed;
+
+					animation_tick += elapsedTime * animation_speed;
 				}
 			}
 			else if (!isAnimationStarted)
@@ -814,7 +956,7 @@ void SceneGame::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// ✅ まず、参照となる「キューブFBX(skinned_mesh[6])」の実寸を取得
+		// ✅ まず、参照となる「キューブcereal(skinned_mesh[6])」の実寸を取得
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -853,11 +995,11 @@ void SceneGame::Render(float elapsedTime)
 		world_obj4 = world_box;
 	}
 
-	// === skinned_meshes[8] = buns.fbx を1体表示 ===
+	// === skinned_meshes[8] = buns.cereal を1体表示 ===
 	if (bun.exists)
 	{
 		using namespace DirectX;
-		// FBXはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
+		// cerealはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
 		XMMATRIX T = XMMatrixTranslation(bun.pos.x, bun.pos.y, bun.pos.z);
 		XMMATRIX S = XMMatrixScaling(0.28f, 0.28f, 0.28f); // 必要なら調整
 		XMFLOAT4X4 world_bun;
@@ -871,7 +1013,7 @@ void SceneGame::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// キューブFBXの実寸（1辺サイズ）を取得
+		// キューブcerealの実寸（1辺サイズ）を取得
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -1011,11 +1153,71 @@ void SceneGame::Render(float elapsedTime)
 		{
 			skinned_meshes[12]->render(fw_->immediate_context.Get(), world, material_color, nullptr, flat_shading);
 		}
-
-
 	}
+	{
+		DirectX::XMMATRIX T4 = DirectX::XMMatrixTranslation(
+			translation_object12.x,
+			translation_object12.y,
+			translation_object12.z
+		);
+		DirectX::XMMATRIX Scale5 = DirectX::XMMatrixScaling(scaleUniform_1, scaleUniform_1, scaleUniform_1);
+		DirectX::XMMATRIX R4 = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object12.x,
+			rotation_object12.y,
+			rotation_object12.z
+		);
 
+		DirectX::XMFLOAT4X4 world4;
+		DirectX::XMStoreFloat4x4(&world4, C * Scale5 * R4 * T4);
+		animation::keyframe keyframe_walk{};
 
+		if (skinned_meshes[13]->animation_clips.size() > 0 && isPlaying)
+		{
+			int clip_index = 0;
+			int frame_index = 0;
+
+			animation& anim_walk = skinned_meshes[12]->animation_clips.at(clip_index);
+			frame_index = static_cast<int>(animation_tick1 * anim_walk.sampling_rate);
+
+			if (frame_index > anim_walk.sequence.size() - 1)
+			{
+				play_count++;
+
+				if (play_count >= 1)
+				{
+					isPlaying = false;
+					animation_tick1 = 0.0f;
+					play_count = 0;
+					frame_index = anim_walk.sequence.size() - 1;
+				}
+				else
+				{
+					animation_tick1 = 0.0f;
+					frame_index = 0;
+				}
+			}
+			else
+			{
+				animation_tick1 += elapsedTime;
+			}
+
+			keyframe_walk = anim_walk.sequence.at(frame_index);
+		}
+
+		if (isPlaying)   // ★Rを押した時だけ描画される
+		{
+			bool prev_flat = flat_shading;
+			flat_shading = false;
+			skinned_meshes[13]->render(
+				fw_->immediate_context.Get(),
+				world4,
+				material_color,
+				&keyframe_walk,
+				flat_shading
+			);
+			flat_shading = prev_flat;
+		}
+	}
 
 	// BOUNDING_BOX
 	{
@@ -1670,13 +1872,15 @@ std::vector<int>  SceneGame::generatePattern()
 	int pattyCount = 5;
 	int cheeseCount = 5;
 	int vegetableCount = 0; // デフォルトは0
-
+	int spawnLimit = 10;
 	// ★ HARDモードなら野菜を追加
 	if (ifMenu == 3) // 3 = HARD
 	{
-		pattyCount = 3;
-		cheeseCount = 3;
-		vegetableCount = 4; // 野菜の数
+		pattyCount = 6;     // 3 -> 6
+		cheeseCount = 6;    // 3 -> 6
+		vegetableCount = 8; // 4 -> 8
+
+		spawnLimit = 15;
 	}
 
 	for (int i = 0; i < pattyCount; ++i) result.push_back(0);   // 0: Patty
@@ -1689,7 +1893,7 @@ std::vector<int>  SceneGame::generatePattern()
 	std::uniform_int_distribution<int> typeDist(0, 1); // 0か1をランダムに出す
 
 	// --- 2. 足りない分をランダムに埋める ---
-	while (result.size() < SPAWN_MAX)
+	while (result.size() < spawnLimit)
 	{
 		// 0(パティ) または 1(チーズ) をランダムに追加
 		result.push_back(typeDist(gen));
@@ -1701,9 +1905,9 @@ std::vector<int>  SceneGame::generatePattern()
 
 	// --- 4. 余剰分を切り捨てる ---
 	// SPAWN_MAX より多い場合は末尾を削除（シャッフル済みなのでランダム削除になる）
-	if (result.size() > SPAWN_MAX)
+	if (result.size() > spawnLimit)
 	{
-		result.resize(SPAWN_MAX);
+		result.resize(spawnLimit);
 	}
 
 	return result;
@@ -1836,7 +2040,6 @@ void  SceneGame::CheckPateCollision()
 		}
 	}
 
-
 	for (auto& v : vegetables)
 	{
 		if (v.body->getLinearFactor().x() != 0.0f) continue; // 既に解除済みならスキップ
@@ -1849,7 +2052,6 @@ void  SceneGame::CheckPateCollision()
 			v.body->activate(true);
 		}
 	}
-
 }
 
 void SceneGame::CheckKusiVegetableCollision()
@@ -1881,7 +2083,6 @@ void SceneGame::CheckKusiVegetableCollision()
 		}
 	}
 }
-
 
 void  SceneGame::Reset()
 {
@@ -1923,7 +2124,6 @@ void  SceneGame::Reset()
 		}
 	}
 	vegetables.clear();
-
 
 	// Bun (上のバンズ) の削除
 	if (bun.body)
@@ -2074,6 +2274,11 @@ void SceneGame::DrawGUI()	//	GUIのマージ + SceneGameの問題修正
 	if (ImGui::Button("Add 1 Cheese"))
 	{
 		add_cheese({ patty_spawn_x, 0.8f, patty_spawn_z }, cheese_default_half_extents, cheese_default_mass, cheese_default_restitution);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Add 1 v"))
+	{
+		add_vegetable({ patty_spawn_x, 0.8f, patty_spawn_z }, vegetable_default_half_extents, vegetable_default_mass, vegetable_default_restitution);
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Clear Cheeses")) {

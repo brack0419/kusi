@@ -26,6 +26,8 @@ public:
 	//GUI•`‰æ
 	void DrawGUI()override;
 
+	void SceneEnd::DrawNumber(int number, float x, float y, ID3D11DeviceContext* ctx);
+
 	std::unique_ptr<skinned_mesh> skinned_meshes[8];
 
 	std::unique_ptr<sprite_batch> sprite_batches[8];

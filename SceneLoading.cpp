@@ -13,9 +13,9 @@ void SceneLoading::Initialize()
 {
 	HRESULT hr{ S_OK };
 
-	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\load_hamburger9.fbx");
-	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\loading_text4.fbx");
-	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\load_hamburger11.fbx");
+	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\load_hamburger9.cereal");
+	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\loading_text4.cereal");
+	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\load_hamburger11.cereal");
 
 	thread = new std::thread(LoadingThread, this);
 }

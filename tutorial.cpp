@@ -17,7 +17,18 @@
 #include <vector>
 #include<random>
 
+static float sprite_x = 1046;
+static float sprite_y = 0;
 
+// 元の基準サイズ
+static float base_w = 1920.0f / 10.0f;
+static float base_h = 1080.0f / 10.0f;
+
+// スケール（比率）
+static float sprite_scale = 5.0f;
+
+float sprite_w = base_w * sprite_scale;
+float sprite_h = base_h * sprite_scale;
 SceneTutorial::SceneTutorial(HWND hwnd, framework* fw) : hwnd(hwnd), fw_(fw)
 {
 	//SceneManager::instance().ChangeScene(new SceneTitle(fw));
@@ -32,35 +43,48 @@ bool SceneTutorial::IsMouseClicked()
 	return triggered;
 }
 
-
 // 初期化
 void SceneTutorial::Initialize()
 {
 	HRESULT hr{ S_OK };
 
-	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty.fbx");
-//	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Shop.fbx");
-	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop7.fbx");
-	skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.fbx");
-	//skinned_meshes[5] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\bus.fbx");
+	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Patty.cereal");
+	//	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Shop.cereal");
+	skinned_meshes[3] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop22.cereal");
+	skinned_meshes[4] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Spautla.cereal");
+	//skinned_meshes[5] = std::make_unique<skinned_mesh>(device.Get(), ".\\resources\\bus.cereal");
 
-	skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.fbx");
+	skinned_meshes[6] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\cube.000.cereal");
 	fw_->dynamic_texture = std::make_unique<framebuffer>(fw_->device.Get(), 512, 512);
 
-	skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.fbx");
-	// 修正: Buns_up.fbx -> Buns_up1.fbx
-		// skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up.fbx");
-	skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up1.fbx");
+	skinned_meshes[7] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Skewers.cereal");
+	// 修正: Buns_up.cereal -> Buns_up1.cereal
+		// skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up.cereal");
+	skinned_meshes[8] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_up1.cereal");
 
-	// 修正: Buns_under.fbx -> Buns_under1.fbx
-	// skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under.fbx");
-	skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under1.fbx");
+	// 修正: Buns_under.cereal -> Buns_under1.cereal
+	// skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under.cereal");
+	skinned_meshes[9] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Buns_under1.cereal");
 
-	// 修正: Cheese.fbx -> Cheese2.fbx
-	// skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese.fbx");
-	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.fbx");
+	// 修正: Cheese.cereal -> Cheese2.cereal
+	// skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese.cereal");
+	skinned_meshes[10] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\Cheese2.cereal");
+
+	skinned_meshes[11] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\menu.fbx");
 
 	sprite_batches[0] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text.png", 1);
+	sprite_batches[1] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text1.png", 1);
+	sprite_batches[2] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text2.png", 1);
+	sprite_batches[3] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text3.png", 1);
+	sprite_batches[4] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text4.png", 1);
+	sprite_batches[5] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text5.png", 1);
+	sprite_batches[6] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text6.png", 1);
+	sprite_batches[7] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text7.png", 1);
+	sprite_batches[8] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text8.png", 1);
+	sprite_batches[9] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text9.png", 1);
+	sprite_batches[10] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text10.png", 1);
+	sprite_batches[11] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text11.png", 1);
+	sprite_batches[12] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\text12.png", 1);
 
 	tutorialState = TutorialState::INTRO;
 
@@ -84,6 +108,8 @@ void SceneTutorial::Initialize()
 	/////////////マージ
 	target_camera_focus_y = camera_focus.y;
 	////////////
+
+	ShowCursor(FALSE);
 }
 
 std::vector<int> SceneTutorial::generatePattern()
@@ -116,6 +142,9 @@ void SceneTutorial::Finalize()
 // 更新処理
 void SceneTutorial::Update(float elapsedTime)
 {
+	ShowCursor(FALSE);
+	fw_->bloomer->bloom_extraction_threshold = 0.268f;
+	fw_->bloomer->bloom_intensity = 0.23;
 	StartTime += elapsedTime;
 
 	//if(GetAsyncKeyState(VK_LSHIFT) & 0x8000)
@@ -282,8 +311,6 @@ void SceneTutorial::Update(float elapsedTime)
 				// 直線速度と回転速度をゼロにして静止させる
 				p.body->setLinearVelocity(btVector3(0, 0, 0));
 				p.body->setAngularVelocity(btVector3(0, 0, 0));
-
-
 			}
 		}
 		if (IsMouseClicked()) {
@@ -296,8 +323,8 @@ void SceneTutorial::Update(float elapsedTime)
 		kusi.move = true;
 		hitStop = true;
 		pateStop = true;
-		if (IsMouseClicked() || (GetAsyncKeyState(VK_DOWN) & 0x8000)) {
-			//if (IsMouseClicked() || (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+		//if (IsMouseClicked() || (GetAsyncKeyState(VK_DOWN) & 0x8000)) {
+			if (IsMouseClicked() || (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
 			kusi.color_a = true;
 			tutorialState = TutorialState::WAIT_KUSI;
 
@@ -329,12 +356,10 @@ void SceneTutorial::Update(float elapsedTime)
 		break;
 	}
 
-
 	// Bullet 物理ステップ
 	if (m_btWorld)
 	{
 		m_btWorld->setGravity(btVector3(0, patty_gravity_y, 0));
-
 
 		// ★ 追加: パテの位置を Bullet のボディに同期させる
 		if (!hitStop && m_pateBody)
@@ -382,7 +407,6 @@ void SceneTutorial::Update(float elapsedTime)
 
 			btQuaternion q = tr.getRotation();
 			P.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
-
 		}
 
 		for (auto& C : cheeses)
@@ -403,7 +427,6 @@ void SceneTutorial::Update(float elapsedTime)
 			C.pos = { (float)pos.getX(), (float)pos.getY(), (float)pos.getZ() };
 			btQuaternion q = tr.getRotation();
 			C.rotQuat = { (float)q.x(), (float)q.y(), (float)q.z(), (float)q.w() };
-
 		}
 	}
 
@@ -614,7 +637,7 @@ void SceneTutorial::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// キューブFBXの実寸（1辺サイズ）を取得して正規化
+		// キューブcerealの実寸（1辺サイズ）を取得して正規化
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -662,7 +685,7 @@ void SceneTutorial::Render(float elapsedTime)
 		DirectX::XMFLOAT4X4 world;
 		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
 		bool prev_flat = flat_shading;
-		flat_shading = true; // Object3 はフラット描画
+		flat_shading = false; // Object3 はフラット描画
 		skinned_meshes[3]->render(fw_->immediate_context.Get(), world, material_color, nullptr, flat_shading);
 		flat_shading = prev_flat;
 	}
@@ -685,6 +708,27 @@ void SceneTutorial::Render(float elapsedTime)
 
 		skinned_meshes[4]->render(fw_->immediate_context.Get(), world_local, material_color, nullptr, flat_shading);
 	}
+
+	{
+		DirectX::XMMATRIX T = DirectX::XMMatrixTranslation(
+			translation_object3.x,
+			translation_object3.y,
+			translation_object3.z
+		);
+		DirectX::XMMATRIX Scale = DirectX::XMMatrixScaling(1, 1, 1);
+		DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
+			rotation_object3.x,
+			rotation_object3.y,
+			rotation_object3.z
+		);
+		DirectX::XMFLOAT4X4 world;
+		DirectX::XMStoreFloat4x4(&world, C * Scale * R * T);
+		bool prev_flat = flat_shading;
+		flat_shading = false; // Object3 はフラット描画
+		skinned_meshes[11]->render(fw_->immediate_context.Get(), world, material_color, nullptr, flat_shading);
+		flat_shading = prev_flat;
+	}
+
 
 	//// === skinned_meshes[7]（アニメーションなし）===
 	///変更箇所
@@ -713,7 +757,7 @@ void SceneTutorial::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// ✅ まず、参照となる「キューブFBX(skinned_mesh[6])」の実寸を取得
+		// ✅ まず、参照となる「キューブcereal(skinned_mesh[6])」の実寸を取得
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -759,16 +803,16 @@ void SceneTutorial::Render(float elapsedTime)
 		world_obj4 = world_box;
 	}
 
-	// === skinned_meshes[8] = buns.fbx を1体表示 ===
+	// === skinned_meshes[8] = buns.cereal を1体表示 ===
 	if (bun.exists)
 	{
 		using namespace DirectX;
-		// FBXはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
+		// cerealはセンチ系のことが多いので、Pattyと同じくらいの見た目スケールに
 		XMMATRIX T = XMMatrixTranslation(bun.pos.x, bun.pos.y, bun.pos.z);
 		XMMATRIX S = XMMatrixScaling(0.28f, 0.28f, 0.28f); // 必要なら調整
 		XMFLOAT4X4 world_bun;
 		XMStoreFloat4x4(&world_bun, C * S * R * T);
-		skinned_meshes[8]->render(fw_->immediate_context.Get(), world_bun, material_color, nullptr, flat_shading);
+		skinned_meshes[8]->render(fw_->immediate_context.Get(), world_bun, material_color, nullptr, false);
 	}
 
 	// （任意）Bunの当たりAABBを可視化
@@ -776,7 +820,7 @@ void SceneTutorial::Render(float elapsedTime)
 	{
 		using namespace DirectX;
 
-		// キューブFBXの実寸（1辺サイズ）を取得
+		// キューブcerealの実寸（1辺サイズ）を取得
 		XMFLOAT3 cubeDim =
 		{
 			skinned_meshes[6]->bounding_box[1].x - skinned_meshes[6]->bounding_box[0].x,
@@ -795,7 +839,6 @@ void SceneTutorial::Render(float elapsedTime)
 		XMStoreFloat4x4(&world_box, C * Sbox * Tbox);
 		//skinned_meshes[6]->render(fw_->immediate_context.Get(), world_box, bun_collider_color, nullptr, true);
 	}
-
 
 	for (const auto& cheese : cheeses)
 	{
@@ -866,7 +909,7 @@ void SceneTutorial::Render(float elapsedTime)
 		//XMStoreFloat4x4(&world, C * S * R * Rp * T);
 		XMStoreFloat4x4(&world, C * S * Rp * T);
 		// skinned_meshes[9] が Buns_under
-		skinned_meshes[9]->render(fw_->immediate_context.Get(), world, material_color, nullptr, flat_shading);
+		skinned_meshes[9]->render(fw_->immediate_context.Get(), world, material_color, nullptr, false);
 	}
 
 	// ★ Buns_under コライダー可視化 (bun_collider_visibleと連動させる例)
@@ -897,8 +940,6 @@ void SceneTutorial::Render(float elapsedTime)
 		// 青っぽく表示
 		//skinned_meshes[6]->render(fw_->immediate_context.Get(), world_box, { 0.2f, 0.2f, 1.0f, 0.35f }, nullptr, true);
 	}
-
-
 
 	// BOUNDING_BOX
 	{
@@ -975,7 +1016,7 @@ void SceneTutorial::Render(float elapsedTime)
 		XMMATRIX T = XMMatrixTranslation(pate_position.x, pate_position.y, pate_position.z);
 		XMFLOAT4X4 world_pate;
 		XMStoreFloat4x4(&world_pate, C * S * T);
-		skinned_meshes[6]->render(fw_->immediate_context.Get(), world_pate, { 0.2f, 0.9f, 1.0f, 0.25f }, nullptr, /*flat_shading*/ true);
+		//skinned_meshes[6]->render(fw_->immediate_context.Get(), world_pate, { 0.2f, 0.9f, 1.0f, 0.25f }, nullptr, /*flat_shading*/ true);
 	}
 	// UNIT.32
 	fw_->framebuffers[0]->deactivate(fw_->immediate_context.Get());
@@ -1012,10 +1053,104 @@ void SceneTutorial::Render(float elapsedTime)
 	fw_->bit_block_transfer->blit(fw_->immediate_context.Get(), fw_->framebuffers[0]->shader_resource_views[0].GetAddressOf(), 0, 1, fw_->pixel_shaders[0].Get());
 	fw_->framebuffers[1]->deactivate(fw_->immediate_context.Get());
 
+	switch (tutorialState)
+	{
+	case TutorialState::INTRO:
+		sprite_batches[0]->begin(fw_->immediate_context.Get());
+		sprite_batches[0]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[0]->end(fw_->immediate_context.Get());
+		// 1. 説明中 -> クリックで次へ
 
-	sprite_batches[0]->begin(fw_->immediate_context.Get());
-	sprite_batches[0]->render(fw_->immediate_context.Get(), 1920 / 2, 1080 / 2, 1920 / 10, 1080 / 10);
-	sprite_batches[0]->end(fw_->immediate_context.Get());
+		break;
+
+	case TutorialState::SPAWN_DEMO:
+		sprite_batches[1]->begin(fw_->immediate_context.Get());
+		sprite_batches[1]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[1]->end(fw_->immediate_context.Get());
+		// 2. 具材落下中
+
+		// 全て落ちきったら次へ（Spawn関数内で isWaitingForPhysics が false に戻るのを待つ）
+		break;
+
+	case TutorialState::EXPLAIN_FALL:
+		sprite_batches[2]->begin(fw_->immediate_context.Get());
+		sprite_batches[2]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[2]->end(fw_->immediate_context.Get());
+		// 3. 「具材を落としてみましょう」 -> クリックで次へ
+		break;
+
+	case TutorialState::EXPLAIN_CONTROL:
+		sprite_batches[3]->begin(fw_->immediate_context.Get());
+		sprite_batches[3]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[3]->end(fw_->immediate_context.Get());
+		// 5. 操作説明 (Rキー待ち)
+		// 4クリック相当はこの画面遷移で包含
+		sprite_batches[4]->begin(fw_->immediate_context.Get());
+		sprite_batches[4]->render(fw_->immediate_context.Get(), sprite_x + 500, sprite_y + 350, sprite_w - 533, sprite_h - 300);
+		sprite_batches[4]->end(fw_->immediate_context.Get());
+		break;
+
+	case TutorialState::BAD_PATTERN_SPAWN:
+		// 悪いパターン落下中
+		sprite_batches[5]->begin(fw_->immediate_context.Get());
+		sprite_batches[5]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[5]->end(fw_->immediate_context.Get());
+		break;
+
+	case TutorialState::EXPLAIN_BAD:
+		// 7. 「作れないのでリセット」 -> クリックで次へ
+		sprite_batches[6]->begin(fw_->immediate_context.Get());
+		sprite_batches[6]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[6]->end(fw_->immediate_context.Get());
+
+		break;
+
+	case TutorialState::WAIT_RESET_2:
+		// 8. Rキー待ち
+		sprite_batches[7]->begin(fw_->immediate_context.Get());
+		sprite_batches[7]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[7]->end(fw_->immediate_context.Get());
+		break;
+
+	case TutorialState::GOOD_PATTERN_SPAWN:
+		// 9. 良いパターン落下中
+		sprite_batches[8]->begin(fw_->immediate_context.Get());
+		sprite_batches[8]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[8]->end(fw_->immediate_context.Get());
+
+		break;
+
+	case TutorialState::EXPLAIN_DARUMA:
+		// 10. 「一番上だけはじく」説明
+		sprite_batches[9]->begin(fw_->immediate_context.Get());
+		sprite_batches[9]->render(fw_->immediate_context.Get(), sprite_x, sprite_y + 500, sprite_w, sprite_h);
+		sprite_batches[9]->end(fw_->immediate_context.Get());
+
+		break;
+
+	case TutorialState::EXPLAIN_KUSI:
+		// 11. 「串を刺しましょう」
+		sprite_batches[10]->begin(fw_->immediate_context.Get());
+		sprite_batches[10]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[10]->end(fw_->immediate_context.Get());
+
+		break;
+
+	case TutorialState::WAIT_KUSI:
+		// 12. 串が降りてくる
+		sprite_batches[11]->begin(fw_->immediate_context.Get());
+		sprite_batches[11]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[11]->end(fw_->immediate_context.Get());
+
+		break;
+
+	case TutorialState::COMPLETED:
+		// 13. 完成 -> タイトルへ
+		sprite_batches[12]->begin(fw_->immediate_context.Get());
+		sprite_batches[12]->render(fw_->immediate_context.Get(), sprite_x, sprite_y, sprite_w, sprite_h);
+		sprite_batches[12]->end(fw_->immediate_context.Get());
+		break;
+	}
 }// Renderのマージ！！}
 
 void SceneTutorial::add_patty(const DirectX::XMFLOAT3& p,
@@ -1052,7 +1187,6 @@ void SceneTutorial::add_patty(const DirectX::XMFLOAT3& p,
 	if (isSpawningPhase)
 	{
 		// LinearFactor: 1=動く, 0=動かない (X, Y, Z) -> Yだけ動かす
-
 
 		// AngularFactor: 1=回転する, 0=回転しない -> 全てロック
 		body->setAngularFactor(btVector3(0, 0, 0));
@@ -1135,8 +1269,6 @@ void  SceneTutorial::simulate_bun(float dt)
 	bun.pos.x += bun.vel.x * dt;
 	bun.pos.y += bun.vel.y * dt;
 	bun.pos.z += bun.vel.z * dt;
-
-
 
 	if (pate_collider_enabled)
 	{
@@ -1262,11 +1394,7 @@ void  SceneTutorial::simulate_patties(float dt)
 		float minY = P.pos.y - P.half_extents.y;
 		if (minY < patty_ground_y)
 		{
-
-
 			float minY = P.pos.y - P.half_extents.y;
-
-
 		}
 	}
 
@@ -1275,10 +1403,7 @@ void  SceneTutorial::simulate_patties(float dt)
 	for (int i = 0; i < n; ++i)
 		for (int j = i + 1; j < n; ++j)
 			resolve_pair(i, j);
-
-
 }
-
 
 //bool IsIntersectAABB(
 //	const DirectX::XMFLOAT3& posA, const DirectX::XMFLOAT3& halfA,
@@ -1319,7 +1444,6 @@ void SceneTutorial::CheckKusiPattyCollision()
 		{
 			// 串に刺さった状態にする
 			patty.isStuck = true;
-
 
 			// 動きを止める
 			patty.vel = { 0.0f, 0.0f, 0.0f };
@@ -1377,7 +1501,6 @@ void  SceneTutorial::add_cheese(const DirectX::XMFLOAT3& p,
 	m_cheeseBodies.push_back(body);
 }
 
-
 void  SceneTutorial::CheckKusiCheeseCollision()
 {
 	using namespace DirectX;
@@ -1393,7 +1516,6 @@ void  SceneTutorial::CheckKusiCheeseCollision()
 		if (hit)
 		{
 			cheese.isStuck = true;
-
 
 			if (cheese.body) {
 				cheese.body->setLinearVelocity(btVector3(0, 0, 0));
@@ -1431,8 +1553,6 @@ void  SceneTutorial::initBulletWorld()
 		cheese_default_half_extents.x,
 		cheese_default_half_extents.y,
 		cheese_default_half_extents.z));
-
-
 
 	// ★ Buns_under (静的剛体) の作成
 	{
@@ -1493,7 +1613,6 @@ void  SceneTutorial::initBulletWorld()
 	}
 }
 
-
 void  SceneTutorial::Spawn(float dt)
 {
 	if (!allSpawn) return;
@@ -1510,7 +1629,6 @@ void  SceneTutorial::Spawn(float dt)
 		}
 		return; // 待機中はスポーン処理を行わない
 	}
-
 
 	float spawnSpeedMultiplier = 5.0f;
 	coolTimer += dt * spawnSpeedMultiplier;
@@ -1541,14 +1659,12 @@ void  SceneTutorial::Spawn(float dt)
 		}
 	}
 	camera_focus = { 0.0f, 0.343f, -10.0f };
-
 }
 
 void  SceneTutorial::EnablePhysicsForGameplay()
 {
 	if (!isSpawningPhase) return; // 既に解除済みなら何もしない
 	isSpawningPhase = false;
-
 
 	// 共通設定用のラムダ式（設定を一括で行う）
 	auto setupBodyForGame = [](btRigidBody* body)
@@ -1573,8 +1689,6 @@ void  SceneTutorial::EnablePhysicsForGameplay()
 	// 全ての具材に適用
 	for (auto& p : patties) setupBodyForGame(p.body);
 	for (auto& c : cheeses) setupBodyForGame(c.body);
-
-
 
 	// 下のバンズ（土台）も摩擦だけは合わせておく（動かない設定は維持される）
 	if (bunUnder.body)
@@ -1697,7 +1811,6 @@ void  SceneTutorial::Reset()
 	patty_spawned_initial = false;
 
 	// BGMを最初から再生し直す場合（任意）
-
 }
 //*************************************
 void SceneTutorial::DrawGUI()	//	GUIのマージ + SceneGameの問題修正

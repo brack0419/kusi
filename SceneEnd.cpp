@@ -7,6 +7,7 @@
 #include "SceneManager.h"
 #include "framework.h"
 
+extern float saveTime;
 SceneEnd::SceneEnd(framework* fw) : fw_(fw)
 {
 }
@@ -17,10 +18,11 @@ void SceneEnd::Initialize()
 	HRESULT hr{ S_OK };
 
 	skinned_meshes[0] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon6.fbx");
-	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop40.fbx");
+	skinned_meshes[1] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\shop41.fbx");
 	skinned_meshes[2] = std::make_unique<skinned_mesh>(fw_->device.Get(), ".\\resources\\neon7.fbx");
 
 	sprite_batches[0] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\END.png", 1);
+	sprite_batches[1] = std::make_unique<sprite_batch>(fw_->device.Get(), L".\\resources\\font_b.png", 1);
 }
 
 //終了化
@@ -56,6 +58,7 @@ void SceneEnd::Finalize()
 //更新処理
 void SceneEnd::Update(float elaspedTime)
 {
+	ShowCursor(TRUE);
 	fw_->light_direction = DirectX::XMFLOAT4{ -1.0f, -1.0f, 1.0f, 0.0f };
 
 	fw_->distance = 20.0f;
@@ -69,6 +72,7 @@ void SceneEnd::Update(float elaspedTime)
 	translation_object3.z = -6.875f;
 
 	HWND hwnd = FindWindow(APPLICATION_NAME, L"");
+
 	// -------------------------
 	// マウス座標取得
 	// -------------------------
@@ -94,7 +98,7 @@ void SceneEnd::Update(float elaspedTime)
 	// -------------------------
 	// 元々の SPACE キー遷移
 	// -------------------------
-	if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+	if (GetAsyncKeyState(VK_LBUTTON) & 0x8000)
 	{
 		SceneManager::instance().ChangeScene(new SceneTitle(fw_));
 		return;
@@ -267,6 +271,10 @@ void SceneEnd::Render(float elapsedTime)
 	sprite_batches[0]->begin(fw_->immediate_context.Get());
 	sprite_batches[0]->render(fw_->immediate_context.Get(), 0, 0, 1920, 1080);
 	sprite_batches[0]->end(fw_->immediate_context.Get());
+
+	int score = static_cast<int>(saveTime);
+
+	DrawNumber(score, 930, 380, fw_->immediate_context.Get());
 }
 
 void SceneEnd::DrawGUI()
@@ -276,4 +284,38 @@ void SceneEnd::DrawGUI()
 
 	ImGui::End();
 #endif
+}
+void SceneEnd::DrawNumber(int number, float x, float y, ID3D11DeviceContext* ctx)
+{
+	const float cellW = 144.0f;
+	const float cellH = 144.0f;
+
+	std::string str = std::to_string(number);
+	float posX = x;
+
+	for (char c : str)
+	{
+		int digit = c - '0';
+
+		int col = digit % 4;
+		int row = digit / 4;
+
+		float sx = col * cellW;
+		float sy = row * cellH;
+		float sw = cellW;
+		float sh = cellH;
+
+		sprite_batches[1]->begin(fw_->immediate_context.Get());
+		sprite_batches[1]->render(
+			ctx,
+			posX, y,         // 描画位置
+			cellW, cellH,    // 描画サイズ
+			1, 1, 1, 1,         // 色
+			0.0f,            // 回転
+			sx, sy, sw, sh   // 切り出し範囲 ←ここが重要!!
+		);
+		sprite_batches[1]->end(fw_->immediate_context.Get());
+
+		posX += cellW; // 次の桁へ移動
+	}
 }

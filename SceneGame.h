@@ -5,17 +5,18 @@
 #define BT_NO_SIMD_OPERATOR_OVERLOADS
 #include <bullet/btBulletDynamicsCommon.h>
 
-#define MENU_MAX 10
+#define MENU_MAX 15
 #define SPAWN_MAX 10
 #define SPAWN_HIGH 0.6f
 
-#define KUSI_SPEED 0.001;
+#define KUSI_SPEED 0.002;
 
 extern int menu_count;
 
 class SceneGame : public Scene
 {
 public:
+	bool now_down;
 	float cameraSpeed = 0.0005f;
 
 	AudioSource* bgmGame;
@@ -77,8 +78,12 @@ public:
 	DirectX::XMFLOAT3 translation_object3{ -0.254f, 0.0f, -9.391f };
 	// メンバ変数として保持（Sceneクラスなど）
 	float scaleUniform_ = 1.098f;
+	float scaleUniform_1 = 0.835f;
 	DirectX::XMFLOAT3 translation_object11{ -0.207, -0.033f, -9.273f };
 	DirectX::XMFLOAT3 rotation_object11{ -6.218f, 3.164f, -0.109f };
+	DirectX::XMFLOAT3 translation_object12{ -0.12f, 0.088f, -9.456f };
+	DirectX::XMFLOAT3 rotation_object12{ -6.218f, 3.164f, -0.109f };
+	float animation_tick_walk_12 = 0.0f;
 	bool isAnimationStarted = false;
 
 	//ImGui追加設定
@@ -223,9 +228,9 @@ public:
 	bool selectMenu = true;
 
 	int ifMenu = 0; // 0 : 初期状態, 1 : easy, 2 : normal, 3 : hard
-	int Emenu[MENU_MAX] = { 1, 2, 1, 0, 0, 0, 0, 0, 0, 0 };
-	int Nmenu[MENU_MAX] = { 1, 2, 1, 2, 0, 0, 0, 0, 0, 0 };
-	int Hmenu[MENU_MAX] = { 1, 1, 2, 2, 1, 0, 0, 0, 0, 0 };
+	int Emenu[MENU_MAX] = { 1, 2, 1, 0, 0, 0, 0, 0, 0, 0,0,0,0,0,0 };
+	int Nmenu[MENU_MAX] = { 1, 2, 1, 2, 0, 0, 0, 0, 0, 0 ,0,0,0,0,0 };
+	int Hmenu[MENU_MAX] = { 1, 1, 3, 2, 1, 3, 0, 0, 0, 0, 0,0,0,0,0 };
 
 	bool pate_collider_enabled = true; // 衝突を有効化
 	bool patty_collider_visible = true;
